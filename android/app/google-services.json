@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "245868538464",
+    "project_id": "zstreak",
+    "storage_bucket": "zstreak.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:245868538464:android:49d8a62dfee33425c47105",
+        "android_client_info": {
+          "package_name": "com.zstreak.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "245868538464-76v0a1o5mo8fipvmeikmg5pre68p217c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zstreak.app",
+            "certificate_hash": "4ea7c8e69a9be535fda3a980170e319457c11850"
+          }
+        },
+        {
+          "client_id": "245868538464-dtg5g98eva4i246n04j31345ivphnph4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwRMsa20tiZsWcWFmQouzXGl-mJNhb94I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "245868538464-dtg5g98eva4i246n04j31345ivphnph4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

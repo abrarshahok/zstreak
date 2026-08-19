@@ -1,0 +1,1834 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../core/copy/app_copy.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/theme_mode_providers.dart';
+import '../../../dev/seed_demo_data.dart';
+import '../../account_linking/presentation/link_account_screen.dart';
+import '../../auth/application/auth_providers.dart';
+import '../../auth/presentation/auth_gate.dart';
+import '../../data_export/data_export_providers.dart';
+import '../../guest/application/guest_providers.dart';
+import '../../monetization/application/entitlement_providers.dart';
+import '../../monetization/presentation/paywall_screen.dart';
+import '../../onboarding/application/user_profile_provider.dart';
+
+/// Settings screen — Gen-Z redesign with GenZBackground, glassmorphic
+/// section cards, and theme-aware colors.
+class SettingsScreen extends ConsumerWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authStateProvider).valueOrNull;
+    final isGuest = user?.isAnonymous ?? true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+
+    final bgColor = isDark ? AppColors.background : AppColors.backgroundLight;
+
+    return Scaffold(
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 18,
+            color: textPrimary,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Settings',
+          style: TextStyle(
+            color: textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            letterSpacing: -0.3,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: isDark ? AppColors.border : AppColors.borderLight,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
+        children:
+            [
+                  // ── Profile ───────────────────────────────────────────────────
+                  _SectionLabel('Profile', accent: accent),
+                  _ProfileCard(
+                    isDark: isDark,
+                    accent: accent,
+                    textPrimary: textPrimary,
+                    textMuted: textMuted,
+                  ),
+
+                  // ── Appearance ────────────────────────────────────────────────
+                  _SectionLabel('Appearance', accent: accent),
+                  _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      _ThemeModeTile(
+                        isDark: isDark,
+                        accent: accent,
+                        textPrimary: textPrimary,
+                      ),
+                    ],
+                  ),
+
+                  // ── Data ──────────────────────────────────────────────────────
+                  _SectionLabel('Data', accent: accent),
+                  _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.ios_share_rounded,
+                        label: AppCopy.exportMyData,
+                        subtitle: 'Free for everyone, always',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => ref.read(dataExporterProvider).shareCsv(),
+                      ),
+                      if (isGuest) ...[
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.delete_sweep_outlined,
+                          label: 'Clear my data',
+                          accent: AppColors.danger,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => _confirmClearGuestData(context, ref),
+                        ),
+                      ],
+                    ],
+                  ),
+
+                  // ── Account ───────────────────────────────────────────────────
+                  _SectionLabel('Account', accent: accent),
+                  _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      if (isGuest) ...[
+                        _SettingsTile(
+                          icon: Icons.person_outline_rounded,
+                          label: AppCopy.guestModeLabel,
+                          subtitle: 'Your data lives on this device',
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                        ),
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.link_rounded,
+                          label: AppCopy.linkAccount,
+                          subtitle: 'Sync & back up your streaks',
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const LinkAccountScreen(),
+                            ),
+                          ),
+                        ),
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.logout_rounded,
+                          label: 'Log out',
+                          subtitle: 'Return to the start screen',
+                          accent: AppColors.danger,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => _confirmGuestLogOut(context, ref),
+                        ),
+                      ] else ...[
+                        _SettingsTile(
+                          icon: Icons.person_outline_rounded,
+                          label: user?.email ?? 'Signed in with Google',
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                        ),
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.logout_rounded,
+                          label: 'Log out',
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => _logOut(context, ref),
+                        ),
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.no_accounts_outlined,
+                          label: 'Delete account',
+                          accent: AppColors.danger,
+                          textPrimary: AppColors.danger,
+                          textMuted: textMuted,
+                          onTap: () => _confirmDeleteAccount(context, ref),
+                        ),
+                      ],
+                    ],
+                  ),
+
+                  // ── Premium ───────────────────────────────────────────────────
+                  _SectionLabel('Premium', accent: accent),
+                  _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.bolt_rounded,
+                        label: 'Unlock the full grind',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PaywallScreen(),
+                          ),
+                        ),
+                      ),
+                      _Divider(isDark: isDark),
+                      _SettingsTile(
+                        icon: Icons.restore_rounded,
+                        label: AppCopy.paywallRestorePurchases,
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => _restorePurchases(context, ref),
+                      ),
+                      _Divider(isDark: isDark),
+                      _SettingsTile(
+                        icon: Icons.widgets_outlined,
+                        label: 'Add home screen widget',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => _addWidget(context, ref),
+                      ),
+                    ],
+                  ),
+
+                  // ── Dev (signed-in only) ──────────────────────────────────────
+                  if (!isGuest) ...[
+                    _SectionLabel('Dev', accent: accent),
+                    _SettingsCard(
+                      isDark: isDark,
+                      children: [
+                        _SettingsTile(
+                          icon: Icons.science_outlined,
+                          label: 'Seed demo data',
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => _seedDemoData(context, ref),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // ── Legal & Support ───────────────────────────────────────────
+                  _SectionLabel('Legal & Support', accent: accent),
+                  _SettingsCard(
+                    isDark: isDark,
+                    children: [
+                      _SettingsTile(
+                        icon: Icons.privacy_tip_outlined,
+                        label: 'Privacy Policy',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => launchUrl(
+                          Uri.parse('https://zstreak.web.app/privacy'),
+                        ),
+                      ),
+                      _Divider(isDark: isDark),
+                      _SettingsTile(
+                        icon: Icons.gavel_rounded,
+                        label: 'Terms of Service',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () => launchUrl(
+                          Uri.parse('https://zstreak.web.app/terms'),
+                        ),
+                      ),
+                      _Divider(isDark: isDark),
+                      _SettingsTile(
+                        icon: Icons.mail_outline_rounded,
+                        label: 'Contact support',
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        onTap: () =>
+                            launchUrl(Uri.parse('mailto:support@zstreak.app')),
+                      ),
+                    ],
+                  ),
+
+                  // ── Version ───────────────────────────────────────────────────
+                  const SizedBox(height: 8),
+                  _AppVersionTile(textMuted: textMuted),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: Text(
+                      'Built different. Built for your streak. ⚡',
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ]
+                .animate(interval: 40.ms)
+                .fadeIn(duration: 300.ms)
+                .slideY(
+                  begin: 0.06,
+                  end: 0,
+                  duration: 300.ms,
+                  curve: Curves.easeOut,
+                ),
+      ),
+    );
+  }
+
+  Future<void> _logOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showFlatConfirmDialog(
+      context: context,
+      title: 'Log out?',
+      body: 'You\'ll be signed out of your account.',
+      confirmLabel: 'Log out',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    await ref.read(authRepositoryProvider).signOut();
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _confirmGuestLogOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showFlatConfirmDialog(
+      context: context,
+      title: 'Log out?',
+      body:
+          'You\'ll return to the start screen. Your local data stays on this device — link an account first if you want to keep it.',
+      confirmLabel: 'Log out',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    await ref.read(authRepositoryProvider).signOut();
+    if (!context.mounted) return;
+    // Clear the entire stack and go back to AuthGate (which shows onboarding).
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGate()),
+      (_) => false,
+    );
+  }
+
+  Future<void> _seedDemoData(BuildContext context, WidgetRef ref) async {
+    final uid = ref.read(authRepositoryProvider).currentUser?.uid;
+    if (uid == null) return;
+    await seedDemoData(FirebaseFirestore.instance, uid);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Demo data seeded.')));
+  }
+
+  Future<void> _confirmClearGuestData(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmed = await _showFlatConfirmDialog(
+      context: context,
+      title: 'Clear all data?',
+      body:
+          'This permanently deletes all your local habits and check-ins. This can\'t be undone.',
+      confirmLabel: 'Clear data',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    final uid = ref.read(authRepositoryProvider).currentUser?.uid;
+    if (uid != null) {
+      await ref.read(guestMetaRepositoryProvider).clearAllGuestData(uid);
+    }
+  }
+
+  Future<void> _confirmDeleteAccount(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmed = await _showFlatConfirmDialog(
+      context: context,
+      title: 'Delete account?',
+      body:
+          'This permanently deletes your account and all your data. This can\'t be undone.',
+      confirmLabel: 'Delete account',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    await ref.read(accountDeletionServiceProvider).deleteAccount();
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  /// Flat-design confirmation dialog matching the app's design system.
+  static Future<bool?> _showFlatConfirmDialog({
+    required BuildContext context,
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required bool isDanger,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
+    final confirmColor = isDanger
+        ? AppColors.danger
+        : (isDark ? AppColors.accent : AppColors.accentTextOnLight);
+    final confirmFg = isDanger
+        ? Colors.white
+        : (isDark ? Colors.black : Colors.white);
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderColor, width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                body,
+                style: TextStyle(color: textMuted, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(false),
+                      child: Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor, width: 1),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: textMuted,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(true),
+                      child: Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: confirmColor,
+                        ),
+                        child: Center(
+                          child: Text(
+                            confirmLabel,
+                            style: TextStyle(
+                              color: confirmFg,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restorePurchases(BuildContext context, WidgetRef ref) async {
+    await ref.read(revenueCatServiceProvider).restorePurchases();
+    final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isPremium ? 'Restored.' : 'No previous purchase found.'),
+      ),
+    );
+  }
+
+  Future<void> _addWidget(BuildContext context, WidgetRef ref) async {
+    final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+    if (!context.mounted) return;
+    if (!isPremium) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
+      return;
+    }
+    await HomeWidget.requestPinWidget(
+      qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider',
+    );
+  }
+}
+
+// ── Section label ────────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label, {required this.accent});
+  final String label;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: accent,
+          fontWeight: FontWeight.w800,
+          fontSize: 10,
+          letterSpacing: 1.4,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Flat card container ───────────────────────────────────────────────────────
+
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({required this.children, required this.isDark});
+  final List<Widget> children;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+// ── Individual settings row ───────────────────────────────────────────────────
+
+class _SettingsTile extends StatelessWidget {
+  const _SettingsTile({
+    required this.icon,
+    required this.label,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+    this.subtitle,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: accent, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: TextStyle(color: textMuted, fontSize: 11),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(Icons.chevron_right_rounded, color: textMuted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Thin divider between tiles ────────────────────────────────────────────────
+
+class _Divider extends StatelessWidget {
+  const _Divider({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      indent: 66,
+      endIndent: 0,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.06),
+    );
+  }
+}
+
+// ── Theme mode segmented control ──────────────────────────────────────────────
+
+class _ThemeModeTile extends ConsumerWidget {
+  const _ThemeModeTile({
+    required this.isDark,
+    required this.accent,
+    required this.textPrimary,
+  });
+
+  final bool isDark;
+  final Color accent;
+  final Color textPrimary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.dark_mode_outlined, color: accent, size: 18),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Theme',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<ThemeMode>(
+                    showSelectedIcon: false,
+                    expandedInsets: EdgeInsets.zero,
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        label: Text(
+                          'System',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        label: Text(
+                          'Light',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        label: Text(
+                          'Dark',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (selection) =>
+                        setThemeMode(ref, selection.first),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── App version tile ──────────────────────────────────────────────────────────
+
+class _AppVersionTile extends StatelessWidget {
+  const _AppVersionTile({required this.textMuted});
+  final Color textMuted;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final version = snapshot.data;
+        return Center(
+          child: Text(
+            version == null
+                ? ''
+                : 'v${version.version} (${version.buildNumber})',
+            style: TextStyle(color: textMuted, fontSize: 11),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Profile card ──────────────────────────────────────────────────────────────
+
+/// Editable profile section — shows current values and opens a bottom sheet
+/// to edit each field. Answers are persisted to SharedPreferences via
+/// [UserProfileNotifier].
+///
+/// Uses [ConsumerStatefulWidget] so the age wheel picker can use a proper
+/// [StatefulWidget] internally, avoiding any closure-capture ambiguity.
+class _ProfileCard extends ConsumerStatefulWidget {
+  const _ProfileCard({
+    required this.isDark,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+  });
+
+  final bool isDark;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+
+  @override
+  ConsumerState<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends ConsumerState<_ProfileCard> {
+  @override
+  Widget build(BuildContext context) {
+    final profile = ref.watch(userProfileProvider);
+
+    final initials = profile.name.trim().isEmpty
+        ? '?'
+        : profile.name
+              .trim()
+              .split(' ')
+              .map((w) => w[0])
+              .take(2)
+              .join()
+              .toUpperCase();
+
+    final dividerColor = widget.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return _SettingsCard(
+      isDark: widget.isDark,
+      children: [
+        // ── Hero header: avatar + name + edit-name tap ──────────────────────
+        InkWell(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          onTap: () => _editTextField(
+            title: 'Your name',
+            icon: Icons.person_outline_rounded,
+            initialValue: profile.name,
+            capitalization: TextCapitalization.words,
+            onSave: (v) => ref.read(userProfileProvider.notifier).setName(v),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+            child: Row(
+              children: [
+                // Avatar — flat solid, no gradient, no glow
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: widget.accent.withValues(alpha: 0.15),
+                    border: Border.all(
+                      color: widget.accent.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: TextStyle(
+                        color: widget.accent,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile.name.isEmpty ? 'Your name' : profile.name,
+                        style: TextStyle(
+                          color: profile.name.isEmpty
+                              ? widget.textMuted
+                              : widget.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Tap to edit name',
+                        style: TextStyle(
+                          color: widget.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.edit_outlined, color: widget.textMuted, size: 16),
+              ],
+            ),
+          ),
+        ),
+
+        Divider(height: 1, indent: 16, endIndent: 16, color: dividerColor),
+
+        // ── Age + Gender side-by-side chips ─────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              // Age chip
+              Expanded(
+                child: _InfoChip(
+                  icon: Icons.cake_outlined,
+                  label: 'Age',
+                  value: profile.age.isEmpty ? 'Not set' : '${profile.age} yrs',
+                  accent: widget.accent,
+                  textPrimary: widget.textPrimary,
+                  textMuted: widget.textMuted,
+                  isDark: widget.isDark,
+                  onTap: () => _editAgePicker(currentAge: profile.age),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Gender chip
+              Expanded(
+                child: _InfoChip(
+                  icon: Icons.wc_rounded,
+                  label: 'Gender',
+                  value: profile.gender.isEmpty ? 'Not set' : profile.gender,
+                  accent: widget.accent,
+                  textPrimary: widget.textPrimary,
+                  textMuted: widget.textMuted,
+                  isDark: widget.isDark,
+                  onTap: () => _editChoice(
+                    title: 'How do you identify?',
+                    choices: const [
+                      'Male',
+                      'Female',
+                      'Non-binary',
+                      'Prefer not to say',
+                    ],
+                    current: profile.gender,
+                    onSave: (v) =>
+                        ref.read(userProfileProvider.notifier).setGender(v),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        Divider(height: 1, indent: 16, endIndent: 16, color: dividerColor),
+
+        // ── Goals section ───────────────────────────────────────────────────
+        InkWell(
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(16),
+          ),
+          onTap: () => _editMultiChoice(
+            title: "What are your goals?",
+            choices: const [
+              'Build healthy habits',
+              'Stay consistent',
+              'Improve productivity',
+              'Personal growth',
+              'Mental wellness',
+              'Physical fitness',
+            ],
+            current: profile.goals,
+            onSave: (v) => ref.read(userProfileProvider.notifier).setGoals(v),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.flag_outlined, color: widget.accent, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'GOALS',
+                      style: TextStyle(
+                        color: widget.textMuted,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.edit_outlined,
+                      color: widget.textMuted,
+                      size: 14,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (profile.goals.isEmpty)
+                  Text(
+                    'Tap to set your goals',
+                    style: TextStyle(
+                      color: widget.textMuted,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: profile.goals.map((g) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: widget.accent.withValues(alpha: 0.12),
+                          border: Border.all(
+                            color: widget.accent.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          g,
+                          style: TextStyle(
+                            color: widget.accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Text field editor ───────────────────────────────────────────────────────
+
+  Future<void> _editTextField({
+    required String title,
+    required IconData icon,
+    required String initialValue,
+    required Future<void> Function(String) onSave,
+    TextCapitalization capitalization = TextCapitalization.none,
+    int maxLength = 40,
+    bool isRequired = true,
+  }) async {
+    final ctrl = TextEditingController(text: initialValue);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+        final textPrimary = isDark
+            ? AppColors.textPrimary
+            : AppColors.textPrimaryLight;
+        final textMuted = isDark
+            ? AppColors.textMuted
+            : AppColors.textMutedLight;
+        final handleColor = isDark
+            ? Colors.white.withValues(alpha: 0.2)
+            : Colors.black.withValues(alpha: 0.12);
+        final borderColor = isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06);
+        final fieldBg = isDark
+            ? AppColors.background.withValues(alpha: 0.6)
+            : Colors.black.withValues(alpha: 0.04);
+        final fieldBorder = isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.07);
+        String? fieldError;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(2),
+                        color: handleColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: fieldError != null
+                          ? AppColors.danger.withValues(alpha: 0.04)
+                          : fieldBg,
+                      border: Border.all(
+                        color: fieldError != null
+                            ? AppColors.danger
+                            : fieldBorder,
+                        width: fieldError != null ? 1.5 : 1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      textCapitalization: capitalization,
+                      maxLength: maxLength,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      onChanged: (_) {
+                        if (fieldError != null) {
+                          setSheetState(() => fieldError = null);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(
+                          icon,
+                          color: fieldError != null
+                              ? AppColors.danger
+                              : textMuted,
+                          size: 20,
+                        ),
+                        border: InputBorder.none,
+                        counterText: '',
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (fieldError != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          size: 13,
+                          color: AppColors.danger,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          fieldError!,
+                          style: const TextStyle(
+                            color: AppColors.danger,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  _SaveButton(
+                    onTap: () async {
+                      final value = ctrl.text.trim();
+                      if (isRequired && value.isEmpty) {
+                        setSheetState(
+                          () => fieldError = 'This field is required',
+                        );
+                        return;
+                      }
+                      if (value.length > maxLength) {
+                        setSheetState(
+                          () => fieldError =
+                              'Must be $maxLength characters or less',
+                        );
+                        return;
+                      }
+                      await onSave(value);
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    ctrl.dispose();
+  }
+
+  // ── Age wheel picker ────────────────────────────────────────────────────────
+
+  Future<void> _editAgePicker({required String currentAge}) async {
+    const minAge = 10;
+    const maxAge = 80;
+    final parsed = int.tryParse(currentAge);
+    // Start at the current saved age, or 22 as a sensible default.
+    final initialAge = (parsed != null && parsed >= minAge && parsed <= maxAge)
+        ? parsed
+        : 22;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AgePickerSheet(
+        initialAge: initialAge,
+        minAge: minAge,
+        maxAge: maxAge,
+        onSave: (age) async {
+          await ref.read(userProfileProvider.notifier).setAge(age.toString());
+        },
+      ),
+    );
+  }
+
+  // ── Multi-select choice picker ───────────────────────────────────────────────
+
+  Future<void> _editMultiChoice({
+    required String title,
+    required List<String> choices,
+    required List<String> current,
+    required Future<void> Function(List<String>) onSave,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+        final textPrimary = isDark
+            ? AppColors.textPrimary
+            : AppColors.textPrimaryLight;
+        final textMuted = isDark
+            ? AppColors.textMuted
+            : AppColors.textMutedLight;
+        final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+        final handleColor = isDark
+            ? Colors.white.withValues(alpha: 0.2)
+            : Colors.black.withValues(alpha: 0.12);
+        final borderColor = isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06);
+        final borderInactive = isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.07);
+        final selected = List<String>.from(current);
+        return StatefulBuilder(
+          builder: (ctx, setState) => Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: handleColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Pick as many as you like',
+                  style: TextStyle(color: textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                ...choices.map((c) {
+                  final isSelected = selected.contains(c);
+                  return GestureDetector(
+                    onTap: () => setState(() {
+                      if (isSelected) {
+                        selected.remove(c);
+                      } else {
+                        selected.add(c);
+                      }
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: isSelected
+                            ? accent.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: isSelected
+                              ? accent.withValues(alpha: 0.5)
+                              : borderInactive,
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              c,
+                              style: TextStyle(
+                                color: isSelected ? textPrimary : textMuted,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            isSelected
+                                ? Icons.check_box_rounded
+                                : Icons.check_box_outline_blank_rounded,
+                            color: isSelected
+                                ? accent
+                                : textMuted.withValues(alpha: 0.3),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                _SaveButton(
+                  onTap: () async {
+                    await onSave(selected);
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Single-select choice picker ──────────────────────────────────────────────
+
+  Future<void> _editChoice({
+    required String title,
+    required List<String> choices,
+    required String current,
+    required Future<void> Function(String) onSave,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+        final textPrimary = isDark
+            ? AppColors.textPrimary
+            : AppColors.textPrimaryLight;
+        final textMuted = isDark
+            ? AppColors.textMuted
+            : AppColors.textMutedLight;
+        final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+        final handleColor = isDark
+            ? Colors.white.withValues(alpha: 0.2)
+            : Colors.black.withValues(alpha: 0.12);
+        final borderColor = isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06);
+        final borderInactive = isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.07);
+        String selected = current;
+        return StatefulBuilder(
+          builder: (ctx, setState) => Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: handleColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...choices.map((c) {
+                  final isSelected = selected == c;
+                  return GestureDetector(
+                    onTap: () => setState(() => selected = c),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: isSelected
+                            ? accent.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: isSelected
+                              ? accent.withValues(alpha: 0.5)
+                              : borderInactive,
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              c,
+                              style: TextStyle(
+                                color: isSelected ? textPrimary : textMuted,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: accent,
+                              size: 20,
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                _SaveButton(
+                  onTap: () async {
+                    if (selected.isNotEmpty) await onSave(selected);
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Age picker sheet (StatefulWidget so selectedAge is proper state) ──────────
+
+class _AgePickerSheet extends StatefulWidget {
+  const _AgePickerSheet({
+    required this.initialAge,
+    required this.minAge,
+    required this.maxAge,
+    required this.onSave,
+  });
+
+  final int initialAge;
+  final int minAge;
+  final int maxAge;
+  final Future<void> Function(int age) onSave;
+
+  @override
+  State<_AgePickerSheet> createState() => _AgePickerSheetState();
+}
+
+class _AgePickerSheetState extends State<_AgePickerSheet> {
+  late int _selectedAge;
+  late FixedExtentScrollController _scrollCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedAge = widget.initialAge;
+    _scrollCtrl = FixedExtentScrollController(
+      initialItem: widget.initialAge - widget.minAge,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+    final handleColor = isDark
+        ? Colors.white.withValues(alpha: 0.2)
+        : Colors.black.withValues(alpha: 0.12);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    const itemHeight = 56.0;
+    const visibleItems = 5;
+    const pickerHeight = itemHeight * visibleItems;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                color: handleColor,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'How old are you?',
+            style: TextStyle(
+              color: textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 17,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Scroll to pick your age',
+            style: TextStyle(color: textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 20),
+          // Drum picker
+          SizedBox(
+            height: pickerHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Selection band
+                Positioned(
+                  top: (pickerHeight - itemHeight) / 2,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: itemHeight,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      border: Border.symmetric(
+                        horizontal: BorderSide(
+                          color: accent.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Wheel
+                ListWheelScrollView.useDelegate(
+                  controller: _scrollCtrl,
+                  itemExtent: itemHeight,
+                  perspective: 0.003,
+                  diameterRatio: 2.2,
+                  physics: const FixedExtentScrollPhysics(),
+                  onSelectedItemChanged: (index) {
+                    setState(() => _selectedAge = widget.minAge + index);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: widget.maxAge - widget.minAge + 1,
+                    builder: (context, index) {
+                      final age = widget.minAge + index;
+                      final isSel = age == _selectedAge;
+                      return Center(
+                        child: Text(
+                          '$age',
+                          style: TextStyle(
+                            color: isSel
+                                ? accent
+                                : textMuted.withValues(alpha: 0.5),
+                            fontSize: isSel ? 28 : 20,
+                            fontWeight: isSel
+                                ? FontWeight.w800
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Top fade
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: itemHeight * 1.5,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            surface.withValues(alpha: 0.95),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Bottom fade
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: itemHeight * 1.5,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            surface.withValues(alpha: 0.95),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _SaveButton(
+            onTap: () async {
+              final nav = Navigator.of(context);
+              await widget.onSave(_selectedAge);
+              if (mounted) nav.pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Reusable save button ──────────────────────────────────────────────────────
+
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+    final fgColor = isDark ? Colors.black : Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: accent,
+        ),
+        child: Center(
+          child: Text(
+            'Save',
+            style: TextStyle(
+              color: fgColor,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Info chip (age / gender side-by-side) ────────────────────────────────────
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Solid surface token — no semi-transparent hacks.
+    final surfaceColor = isDark
+        ? AppColors.surfaceElevated
+        : AppColors.surfaceElevatedLight;
+    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: surfaceColor,
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: accent, size: 12),
+                const SizedBox(width: 4),
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    color: textMuted,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const Spacer(),
+                Icon(Icons.edit_outlined, color: textMuted, size: 11),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                color: value == 'Not set' ? textMuted : textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                fontStyle: value == 'Not set'
+                    ? FontStyle.italic
+                    : FontStyle.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
