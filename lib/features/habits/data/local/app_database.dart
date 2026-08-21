@@ -14,26 +14,29 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
       if (from < 2) {
-        // Feature 1: streak freeze columns (added in schema v2).
-        // Raw SQL used here because generated column accessors are not
-        // available until after build_runner runs.
+        // Schema v2: streak freeze columns (now unused but kept for
+        // backward-compat so existing installs don't crash on upgrade).
         await customStatement(
           'ALTER TABLE habits ADD COLUMN streak_freezes INTEGER NOT NULL DEFAULT 1',
         );
         await customStatement(
           'ALTER TABLE habits ADD COLUMN frozen_dates TEXT',
         );
-        // Feature 6: drag-to-reorder sort order (added in schema v2).
+        // Schema v2: drag-to-reorder sort order.
         await customStatement(
           'ALTER TABLE habits ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
         );
+      }
+      if (from < 3) {
+        // Schema v3: optional habit description.
+        await customStatement('ALTER TABLE habits ADD COLUMN description TEXT');
       }
     },
   );

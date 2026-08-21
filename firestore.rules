@@ -14,6 +14,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
+      // Profile data collected during onboarding (name, age, gender, goals).
+      match /profile/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
       match /habits/{habitId} {
         allow read, write: if isOwner(uid);
 

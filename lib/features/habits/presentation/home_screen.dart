@@ -6,11 +6,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
 import '../../analytics/analytics_service.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
+import '../../monetization/application/entitlement_providers.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
 import '../../reviews/review_prompt_service.dart';
 import '../../settings/presentation/settings_screen.dart';
@@ -23,6 +26,7 @@ import 'archived_habits_screen.dart';
 import 'edit_habit_screen.dart';
 import 'habit_detail_screen.dart';
 import 'habit_templates_screen.dart';
+import '../../notifications/application/notification_providers.dart';
 import 'habit_tile.dart';
 import 'milestone_overlay.dart';
 import 'weekly_review_card.dart';
@@ -70,6 +74,10 @@ class HomeScreen extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppColors.background : AppColors.backgroundLight;
 
+    // Watch entitlement — treat loading/error as "not Pro" (safe default).
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
+    final limit = AppConfig.freeTierHabitLimit;
+
     return Scaffold(
       backgroundColor: bg,
       body: CustomScrollView(
@@ -103,21 +111,42 @@ class HomeScreen extends ConsumerWidget {
                   return _TodayFocusSliver(habits: list, isDark: isDark);
                 }
 
-                // ── All mode (original) ──────────────────────────────────
+                // ── Determine visible vs locked habits ───────────────────
+                final visibleList = (!isPro && list.length > limit)
+                    ? list.sublist(0, limit)
+                    : list;
+                final lockedCount = (!isPro && list.length > limit)
+                    ? list.length - limit
+                    : 0;
+
+                // ── All mode ─────────────────────────────────────────────
                 return SliverMainAxisGroup(
                   slivers: [
                     SliverToBoxAdapter(
-                      child: _StreakSummaryBar(habits: list, isDark: isDark),
+                      child: _StreakSummaryBar(
+                        habits: visibleList,
+                        isDark: isDark,
+                      ),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                    SliverToBoxAdapter(child: WeeklyReviewCard(habits: list)),
+                    SliverToBoxAdapter(
+                      child: WeeklyReviewCard(habits: visibleList),
+                    ),
                     if (viewMode == _ViewMode.list)
                       SliverToBoxAdapter(
-                        child: _ReorderableHabitList(habits: list),
+                        child: _ReorderableHabitList(habits: visibleList),
                       )
                     else
                       SliverToBoxAdapter(
-                        child: _ReorderableHabitGrid(habits: list),
+                        child: _ReorderableHabitGrid(habits: visibleList),
+                      ),
+                    // ── Paywall gate card (free tier / expired) ──────────
+                    if (lockedCount > 0)
+                      SliverToBoxAdapter(
+                        child: _PaywallGateCard(
+                          lockedCount: lockedCount,
+                          isDark: isDark,
+                        ),
                       ),
                   ],
                 );
@@ -126,28 +155,49 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: _AddHabitFab(isDark: isDark),
+      floatingActionButton: _AddHabitFab(
+        isDark: isDark,
+        isPro: isPro,
+        habitCount: habits.valueOrNull?.length ?? 0,
+        limit: limit,
+      ),
     );
   }
 }
 
 // ─── Add Habit FAB ────────────────────────────────────────────────────────────
 
-class _AddHabitFab extends StatelessWidget {
-  const _AddHabitFab({required this.isDark});
+class _AddHabitFab extends ConsumerWidget {
+  const _AddHabitFab({
+    required this.isDark,
+    required this.isPro,
+    required this.habitCount,
+    required this.limit,
+  });
 
   final bool isDark;
+  final bool isPro;
+  final int habitCount;
+  final int limit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final atLimit = !isPro && habitCount >= limit;
     final bg = isDark ? AppColors.textPrimary : AppColors.textPrimaryLight;
     final fg = isDark ? AppColors.background : AppColors.backgroundLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
 
     return GestureDetector(
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const EditHabitScreen())),
+      onTap: () {
+        if (atLimit) {
+          // Free tier at limit — open paywall instead.
+          navigateToPaywall(context, ref);
+        } else {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const EditHabitScreen()));
+        }
+      },
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -159,10 +209,14 @@ class _AddHabitFab extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_rounded, color: fg, size: 20),
+            Icon(
+              atLimit ? Icons.lock_outline_rounded : Icons.add_rounded,
+              color: fg,
+              size: 20,
+            ),
             const SizedBox(width: 6),
             Text(
-              'New habit',
+              atLimit ? 'Unlock more' : 'New habit',
               style: TextStyle(
                 color: fg,
                 fontSize: 14,
@@ -768,6 +822,14 @@ class HabitGridCard extends ConsumerWidget {
       await ref
           .read(analyticsServiceProvider)
           .logStreakMilestone(habitId: habit.id, streak: updated.currentStreak);
+      await ref
+          .read(notificationOrchestratorProvider)
+          .onCheckIn(
+            habitId: habit.id,
+            habitName: habit.name,
+            habitEmoji: habit.emoji,
+            newStreak: updated.currentStreak,
+          );
 
       if (context.mounted) {
         await maybeShowMilestoneOverlay(
@@ -921,40 +983,6 @@ class HabitGridCard extends ConsumerWidget {
                   ],
                 ],
               ),
-
-              // ── Freeze badge ───────────────────────────────────────────
-              if (habit.streakFreezes > 0) ...[
-                const SizedBox(height: 5),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    color: const Color(0xFF00BFFF).withValues(alpha: 0.12),
-                    border: Border.all(
-                      color: const Color(0xFF00BFFF).withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🧊', style: TextStyle(fontSize: 9)),
-                      const SizedBox(width: 3),
-                      Text(
-                        '${habit.streakFreezes} freeze${habit.streakFreezes == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          color: Color(0xFF00BFFF),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
 
               const Spacer(),
 
@@ -1269,28 +1297,25 @@ class _HomeAppBar extends ConsumerWidget {
     final border = isDark ? AppColors.border : AppColors.borderLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
 
-    return SliverAppBar(
-      expandedHeight: banner != null ? 148 : 104,
-      floating: true,
-      snap: true,
-      pinned: false,
-      backgroundColor: bg,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            ?banner,
-            Container(
-              decoration: BoxDecoration(
-                color: bg,
-                border: Border(bottom: BorderSide(color: border, width: 1)),
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-              child: SafeArea(
-                bottom: false,
+    return SliverToBoxAdapter(
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(bottom: BorderSide(color: border, width: 1)),
+        ),
+        // SafeArea wraps the entire header (banner + title) so the status
+        // bar inset is applied exactly once to the whole block.
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Guest banner (if any) — inside SafeArea so it clears the status bar
+              ?banner,
+              // Title + controls
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -1385,8 +1410,8 @@ class _HomeAppBar extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1863,5 +1888,138 @@ class _EmptyStateWithTemplates extends StatelessWidget {
         final n = template.timesPerWeek ?? 3;
         return '$n× per week';
     }
+  }
+}
+
+// ─── Paywall Gate Card ────────────────────────────────────────────────────────
+//
+// Shown below the free-tier habit list when the user has more habits than the
+// free limit (either never subscribed, or subscription has expired).
+// Tapping it opens the PaywallScreen.
+
+class _PaywallGateCard extends ConsumerWidget {
+  const _PaywallGateCard({required this.lockedCount, required this.isDark});
+
+  final int lockedCount;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final border = isDark ? AppColors.border : AppColors.borderLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+
+    final headline = lockedCount == 1
+        ? '1 habit is locked'
+        : '$lockedCount habits are locked';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: GestureDetector(
+        onTap: () => navigateToPaywall(context, ref),
+        child: Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.45),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Blurred ghost rows ──────────────────────────────────────
+              ...List.generate(lockedCount.clamp(0, 2), (i) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                  child: Opacity(
+                    opacity: 0.28 - i * 0.08,
+                    child: Container(
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: border,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+
+              // ── Lock message ────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent.withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.lock_outline_rounded,
+                        color: accent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      headline,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Subscribe again to see all your habits\nand keep your streaks alive.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // ── CTA button ────────────────────────────────────────
+                    Container(
+                      width: double.infinity,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Restore Pro access →',
+                          style: TextStyle(
+                            color: isDark ? Colors.black : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.06, duration: 280.ms);
   }
 }

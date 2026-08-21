@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Opening ZStreak…</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #0e0e0e;
+        color: #f2f2f2;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 20px;
+        padding: 40px 32px;
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+      }
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(181, 123, 255, 0.1);
+        border: 1px solid rgba(181, 123, 255, 0.25);
+        border-radius: 20px;
+        padding: 8px 16px;
+        margin-bottom: 28px;
+      }
+      .logo-text {
+        color: #b57bff;
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: 2px;
+      }
+      h1 {
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        line-height: 1.15;
+        margin-bottom: 12px;
+      }
+      p {
+        color: #888;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 28px;
+      }
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(181, 123, 255, 0.2);
+        border-top-color: #b57bff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 24px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .btn {
+        display: inline-block;
+        background: #b57bff;
+        color: #000;
+        font-weight: 700;
+        font-size: 15px;
+        padding: 14px 28px;
+        border-radius: 12px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        width: 100%;
+      }
+      .hint {
+        color: #555;
+        font-size: 12px;
+        margin-top: 16px;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">
+        <span>⚡</span>
+        <span class="logo-text">ZSTREAK</span>
+      </div>
+
+      <div id="loading">
+        <div class="spinner"></div>
+        <h1>Opening ZStreak…</h1>
+        <p>
+          Completing your sign-in. If the app doesn't open automatically, tap
+          the button below.
+        </p>
+        <a id="openBtn" href="#" class="btn">Open ZStreak</a>
+        <p class="hint">Make sure ZStreak is installed on this device.</p>
+      </div>
+    </div>
+
+    <script>
+      // Build the deep link: pass the full page URL (which contains the oobCode)
+      // back into the app via a custom scheme intent.
+      // The app's _handleEmailLinkIfPresent reads the initial route and calls
+      // FirebaseAuth.signInWithEmailLink / linkWithEmailLink.
+      var currentUrl = window.location.href;
+
+      // Android intent URI — opens MainActivity directly with the sign-in link.
+      var intentUrl =
+        "intent://zstreak.web.app/__/auth/links" +
+        window.location.search +
+        "#Intent;scheme=https;package=com.zstreak.app;S.browser_fallback_url=" +
+        encodeURIComponent(currentUrl) +
+        ";end";
+
+      document.getElementById("openBtn").href = intentUrl;
+
+      // Auto-redirect after a short delay so the spinner is visible.
+      setTimeout(function () {
+        window.location.href = intentUrl;
+      }, 1200);
+    </script>
+  </body>
+</html>

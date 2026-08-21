@@ -25,6 +25,7 @@ abstract class HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   });
 
   Stream<CheckIn?> watchCheckIn({
@@ -51,6 +52,7 @@ abstract class HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   });
 
   /// Reversible: hides the habit from Home but keeps its history (Section 3b).
@@ -74,11 +76,6 @@ abstract class HabitRepository {
   /// Feature 2 – Habit Notes: streams all check-ins for a habit so the
   /// detail screen can show note indicators on grid cells.
   Stream<List<CheckIn>> watchHabitCheckIns(String habitId);
-
-  /// Feature 1 – Streak Freeze: consumes one freeze token for [date],
-  /// appending it to [frozenDates] and decrementing [streakFreezes].
-  /// No-op if [streakFreezes] is already 0.
-  Future<void> useFreeze({required String habitId, required String date});
 
   /// Feature 6 – Drag-to-reorder: persists new [sortOrder] values for the
   /// given habit ids. [orderedIds] is the full list in display order.

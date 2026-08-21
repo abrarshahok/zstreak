@@ -12,13 +12,12 @@ class Habit {
     required this.frequencyType,
     required this.frequencyConfig,
     this.reminderTime,
+    this.description,
     this.currentStreak = 0,
     this.longestStreak = 0,
     required this.createdAt,
     this.archivedAt,
     required this.updatedAt,
-    this.streakFreezes = 1,
-    this.frozenDates = const {},
     this.sortOrder = 0,
   });
 
@@ -32,18 +31,14 @@ class Habit {
   /// "HH:mm" local time, nullable — reminders are wired in Stage 8.
   final String? reminderTime;
 
+  /// Optional free-text description of what the user plans to track.
+  final String? description;
+
   final int currentStreak;
   final int longestStreak;
   final DateTime createdAt;
   final DateTime? archivedAt;
   final DateTime updatedAt;
-
-  /// Feature 1 – Streak Freeze: number of remaining freeze tokens.
-  final int streakFreezes;
-
-  /// Feature 1 – Streak Freeze: set of "YYYY-MM-DD" date strings that
-  /// were frozen (missed but protected from breaking the streak).
-  final Set<String> frozenDates;
 
   /// Feature 6 – Drag-to-reorder: position index; lower = higher in list.
   final int sortOrder;
@@ -57,13 +52,13 @@ class Habit {
     FrequencyType? frequencyType,
     FrequencyConfig? frequencyConfig,
     String? reminderTime,
+    String? description,
+    bool clearDescription = false,
     int? currentStreak,
     int? longestStreak,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     required DateTime updatedAt,
-    int? streakFreezes,
-    Set<String>? frozenDates,
     int? sortOrder,
   }) {
     return Habit(
@@ -74,13 +69,12 @@ class Habit {
       frequencyType: frequencyType ?? this.frequencyType,
       frequencyConfig: frequencyConfig ?? this.frequencyConfig,
       reminderTime: reminderTime ?? this.reminderTime,
+      description: clearDescription ? null : (description ?? this.description),
       currentStreak: currentStreak ?? this.currentStreak,
       longestStreak: longestStreak ?? this.longestStreak,
       createdAt: createdAt,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       updatedAt: updatedAt,
-      streakFreezes: streakFreezes ?? this.streakFreezes,
-      frozenDates: frozenDates ?? this.frozenDates,
       sortOrder: sortOrder ?? this.sortOrder,
     );
   }

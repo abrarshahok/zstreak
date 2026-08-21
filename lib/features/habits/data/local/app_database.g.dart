@@ -79,6 +79,17 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _currentStreakMeta = const VerificationMeta(
     'currentStreak',
   );
@@ -180,6 +191,7 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
     frequencyType,
     frequencyConfig,
     reminderTime,
+    description,
     currentStreak,
     longestStreak,
     createdAt,
@@ -258,6 +270,15 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
         reminderTime.isAcceptableOrUnknown(
           data['reminder_time']!,
           _reminderTimeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
         ),
       );
     }
@@ -362,6 +383,10 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
         DriftSqlType.string,
         data['${effectivePrefix}reminder_time'],
       ),
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
       currentStreak: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}current_streak'],
@@ -411,6 +436,9 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
   final String frequencyType;
   final String frequencyConfig;
   final String? reminderTime;
+
+  /// Optional free-text description of what the user plans to track.
+  final String? description;
   final int currentStreak;
   final int longestStreak;
   final DateTime createdAt;
@@ -435,6 +463,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     required this.frequencyType,
     required this.frequencyConfig,
     this.reminderTime,
+    this.description,
     required this.currentStreak,
     required this.longestStreak,
     required this.createdAt,
@@ -455,6 +484,9 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     map['frequency_config'] = Variable<String>(frequencyConfig);
     if (!nullToAbsent || reminderTime != null) {
       map['reminder_time'] = Variable<String>(reminderTime);
+    }
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
     }
     map['current_streak'] = Variable<int>(currentStreak);
     map['longest_streak'] = Variable<int>(longestStreak);
@@ -482,6 +514,9 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       reminderTime: reminderTime == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderTime),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
       currentStreak: Value(currentStreak),
       longestStreak: Value(longestStreak),
       createdAt: Value(createdAt),
@@ -510,6 +545,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       frequencyType: serializer.fromJson<String>(json['frequencyType']),
       frequencyConfig: serializer.fromJson<String>(json['frequencyConfig']),
       reminderTime: serializer.fromJson<String?>(json['reminderTime']),
+      description: serializer.fromJson<String?>(json['description']),
       currentStreak: serializer.fromJson<int>(json['currentStreak']),
       longestStreak: serializer.fromJson<int>(json['longestStreak']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -531,6 +567,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       'frequencyType': serializer.toJson<String>(frequencyType),
       'frequencyConfig': serializer.toJson<String>(frequencyConfig),
       'reminderTime': serializer.toJson<String?>(reminderTime),
+      'description': serializer.toJson<String?>(description),
       'currentStreak': serializer.toJson<int>(currentStreak),
       'longestStreak': serializer.toJson<int>(longestStreak),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -550,6 +587,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     String? frequencyType,
     String? frequencyConfig,
     Value<String?> reminderTime = const Value.absent(),
+    Value<String?> description = const Value.absent(),
     int? currentStreak,
     int? longestStreak,
     DateTime? createdAt,
@@ -566,6 +604,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     frequencyType: frequencyType ?? this.frequencyType,
     frequencyConfig: frequencyConfig ?? this.frequencyConfig,
     reminderTime: reminderTime.present ? reminderTime.value : this.reminderTime,
+    description: description.present ? description.value : this.description,
     currentStreak: currentStreak ?? this.currentStreak,
     longestStreak: longestStreak ?? this.longestStreak,
     createdAt: createdAt ?? this.createdAt,
@@ -590,6 +629,9 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       reminderTime: data.reminderTime.present
           ? data.reminderTime.value
           : this.reminderTime,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
       currentStreak: data.currentStreak.present
           ? data.currentStreak.value
           : this.currentStreak,
@@ -621,6 +663,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           ..write('frequencyType: $frequencyType, ')
           ..write('frequencyConfig: $frequencyConfig, ')
           ..write('reminderTime: $reminderTime, ')
+          ..write('description: $description, ')
           ..write('currentStreak: $currentStreak, ')
           ..write('longestStreak: $longestStreak, ')
           ..write('createdAt: $createdAt, ')
@@ -642,6 +685,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     frequencyType,
     frequencyConfig,
     reminderTime,
+    description,
     currentStreak,
     longestStreak,
     createdAt,
@@ -662,6 +706,7 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           other.frequencyType == this.frequencyType &&
           other.frequencyConfig == this.frequencyConfig &&
           other.reminderTime == this.reminderTime &&
+          other.description == this.description &&
           other.currentStreak == this.currentStreak &&
           other.longestStreak == this.longestStreak &&
           other.createdAt == this.createdAt &&
@@ -680,6 +725,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
   final Value<String> frequencyType;
   final Value<String> frequencyConfig;
   final Value<String?> reminderTime;
+  final Value<String?> description;
   final Value<int> currentStreak;
   final Value<int> longestStreak;
   final Value<DateTime> createdAt;
@@ -697,6 +743,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     this.frequencyType = const Value.absent(),
     this.frequencyConfig = const Value.absent(),
     this.reminderTime = const Value.absent(),
+    this.description = const Value.absent(),
     this.currentStreak = const Value.absent(),
     this.longestStreak = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -715,6 +762,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     required String frequencyType,
     required String frequencyConfig,
     this.reminderTime = const Value.absent(),
+    this.description = const Value.absent(),
     this.currentStreak = const Value.absent(),
     this.longestStreak = const Value.absent(),
     required DateTime createdAt,
@@ -740,6 +788,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     Expression<String>? frequencyType,
     Expression<String>? frequencyConfig,
     Expression<String>? reminderTime,
+    Expression<String>? description,
     Expression<int>? currentStreak,
     Expression<int>? longestStreak,
     Expression<DateTime>? createdAt,
@@ -758,6 +807,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
       if (frequencyType != null) 'frequency_type': frequencyType,
       if (frequencyConfig != null) 'frequency_config': frequencyConfig,
       if (reminderTime != null) 'reminder_time': reminderTime,
+      if (description != null) 'description': description,
       if (currentStreak != null) 'current_streak': currentStreak,
       if (longestStreak != null) 'longest_streak': longestStreak,
       if (createdAt != null) 'created_at': createdAt,
@@ -778,6 +828,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     Value<String>? frequencyType,
     Value<String>? frequencyConfig,
     Value<String?>? reminderTime,
+    Value<String?>? description,
     Value<int>? currentStreak,
     Value<int>? longestStreak,
     Value<DateTime>? createdAt,
@@ -796,6 +847,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
       frequencyType: frequencyType ?? this.frequencyType,
       frequencyConfig: frequencyConfig ?? this.frequencyConfig,
       reminderTime: reminderTime ?? this.reminderTime,
+      description: description ?? this.description,
       currentStreak: currentStreak ?? this.currentStreak,
       longestStreak: longestStreak ?? this.longestStreak,
       createdAt: createdAt ?? this.createdAt,
@@ -831,6 +883,9 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     }
     if (reminderTime.present) {
       map['reminder_time'] = Variable<String>(reminderTime.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
     }
     if (currentStreak.present) {
       map['current_streak'] = Variable<int>(currentStreak.value);
@@ -872,6 +927,7 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
           ..write('frequencyType: $frequencyType, ')
           ..write('frequencyConfig: $frequencyConfig, ')
           ..write('reminderTime: $reminderTime, ')
+          ..write('description: $description, ')
           ..write('currentStreak: $currentStreak, ')
           ..write('longestStreak: $longestStreak, ')
           ..write('createdAt: $createdAt, ')
@@ -1706,6 +1762,7 @@ typedef $$HabitsTableCreateCompanionBuilder =
       required String frequencyType,
       required String frequencyConfig,
       Value<String?> reminderTime,
+      Value<String?> description,
       Value<int> currentStreak,
       Value<int> longestStreak,
       required DateTime createdAt,
@@ -1725,6 +1782,7 @@ typedef $$HabitsTableUpdateCompanionBuilder =
       Value<String> frequencyType,
       Value<String> frequencyConfig,
       Value<String?> reminderTime,
+      Value<String?> description,
       Value<int> currentStreak,
       Value<int> longestStreak,
       Value<DateTime> createdAt,
@@ -1800,6 +1858,11 @@ class $$HabitsTableFilterComposer
 
   ColumnFilters<String> get reminderTime => $composableBuilder(
     column: $table.reminderTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1913,6 +1976,11 @@ class $$HabitsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get currentStreak => $composableBuilder(
     column: $table.currentStreak,
     builder: (column) => ColumnOrderings(column),
@@ -1987,6 +2055,11 @@ class $$HabitsTableAnnotationComposer
 
   GeneratedColumn<String> get reminderTime => $composableBuilder(
     column: $table.reminderTime,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => column,
   );
 
@@ -2085,6 +2158,7 @@ class $$HabitsTableTableManager
                 Value<String> frequencyType = const Value.absent(),
                 Value<String> frequencyConfig = const Value.absent(),
                 Value<String?> reminderTime = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<int> currentStreak = const Value.absent(),
                 Value<int> longestStreak = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -2102,6 +2176,7 @@ class $$HabitsTableTableManager
                 frequencyType: frequencyType,
                 frequencyConfig: frequencyConfig,
                 reminderTime: reminderTime,
+                description: description,
                 currentStreak: currentStreak,
                 longestStreak: longestStreak,
                 createdAt: createdAt,
@@ -2121,6 +2196,7 @@ class $$HabitsTableTableManager
                 required String frequencyType,
                 required String frequencyConfig,
                 Value<String?> reminderTime = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<int> currentStreak = const Value.absent(),
                 Value<int> longestStreak = const Value.absent(),
                 required DateTime createdAt,
@@ -2138,6 +2214,7 @@ class $$HabitsTableTableManager
                 frequencyType: frequencyType,
                 frequencyConfig: frequencyConfig,
                 reminderTime: reminderTime,
+                description: description,
                 currentStreak: currentStreak,
                 longestStreak: longestStreak,
                 createdAt: createdAt,

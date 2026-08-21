@@ -7,6 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../monetization/application/entitlement_providers.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
@@ -33,14 +35,7 @@ class HabitDetailScreen extends ConsumerWidget {
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
 
-    // Determine if today is missed (not completed) and whether it's frozen
-    final today = todayLocalDateString();
-    final todayCheckIn = ref.watch(
-      checkInProvider(CheckInQuery(habit.id, today)),
-    );
-    final isTodayDone = todayCheckIn.valueOrNull?.completed ?? false;
-    final isTodayMissed = !isTodayDone;
-    final isTodayFrozen = habit.frozenDates.contains(today);
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
     return Scaffold(
       backgroundColor: bg,
@@ -106,23 +101,31 @@ class HabitDetailScreen extends ConsumerWidget {
                       ],
                     ),
 
-                    // ── Streak Freeze card — show when freezes available or
-                    // today is already frozen (so user sees the protected state)
-                    if (habit.streakFreezes > 0 || isTodayFrozen)
+                    // ── Description ────────────────────────────────────────
+                    if (habit.description != null &&
+                        habit.description!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: _FreezeCard(
-                          habit: habit,
-                          isTodayMissed: isTodayMissed,
-                          isTodayFrozen: isTodayFrozen,
-                          today: today,
-                          accentColor: accentColor,
-                          surface: surface,
-                          border: border,
-                          textPrimary: textPrimary,
-                          textMuted: textMuted,
-                          isDark: isDark,
-                        ).animate().fadeIn(delay: 220.ms),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: surface,
+                            border: Border.all(color: border, width: 1),
+                          ),
+                          child: Text(
+                            habit.description!,
+                            style: TextStyle(
+                              color: textMuted,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ).animate().fadeIn(delay: 210.ms),
                       ),
 
                     if (habit.frequencyType == FrequencyType.xPerWeek)
@@ -232,7 +235,7 @@ class HabitDetailScreen extends ConsumerWidget {
 
                     // ── Log past day ───────────────────────────────────────
                     OutlinedButton.icon(
-                      onPressed: () => _logPastDay(context, ref),
+                      onPressed: () => _logPastDay(context, ref, isPro: isPro),
                       icon: const Icon(Icons.history_rounded, size: 16),
                       label: const Text('Log a past day'),
                       style: OutlinedButton.styleFrom(
@@ -261,19 +264,44 @@ class HabitDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _logPastDay(BuildContext context, WidgetRef ref) async {
+  Future<void> _logPastDay(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool isPro,
+  }) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Free tier: only the past 7 days. Pro: back to habit creation date.
+    final firstDate = isPro
+        ? DateTime(
+            habit.createdAt.year,
+            habit.createdAt.month,
+            habit.createdAt.day,
+          )
+        : today.subtract(const Duration(days: 7));
+
+    final lastDate = today.subtract(const Duration(days: 1));
+
+    // If free user has no eligible days (habit created today), gate them.
+    if (!isPro && firstDate.isAfter(lastDate)) {
+      if (!context.mounted) return;
+      await navigateToPaywall(context, ref);
+      return;
+    }
+
+    if (!context.mounted) return;
     final picked = await showDatePicker(
       context: context,
-      firstDate: DateTime(
-        habit.createdAt.year,
-        habit.createdAt.month,
-        habit.createdAt.day,
-      ),
-      lastDate: DateTime(now.year, now.month, now.day - 1),
-      initialDate: DateTime(now.year, now.month, now.day - 1),
+      firstDate: firstDate,
+      lastDate: lastDate,
+      initialDate: lastDate,
     );
     if (picked == null) return;
+    // Do NOT guard setCheckIn with context.mounted — setCheckIn doesn't use
+    // context, and the guard was causing silent no-ops when the ConsumerWidget
+    // rebuilt (e.g. from a streakDetailProvider emission) while the date
+    // picker was open, making context.mounted return false.
     await ref
         .read(habitRepositoryProvider)
         .setCheckIn(
@@ -281,111 +309,6 @@ class HabitDetailScreen extends ConsumerWidget {
           date: localDateString(picked),
           completed: true,
         );
-  }
-}
-
-// ─── Freeze Card ──────────────────────────────────────────────────────────────
-
-class _FreezeCard extends ConsumerWidget {
-  const _FreezeCard({
-    required this.habit,
-    required this.isTodayMissed,
-    required this.isTodayFrozen,
-    required this.today,
-    required this.accentColor,
-    required this.surface,
-    required this.border,
-    required this.textPrimary,
-    required this.textMuted,
-    required this.isDark,
-  });
-
-  final Habit habit;
-  final bool isTodayMissed;
-  final bool isTodayFrozen;
-  final String today;
-  final Color accentColor;
-  final Color surface;
-  final Color border;
-  final Color textPrimary;
-  final Color textMuted;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    const iceBlue = Color(0xFF00BFFF);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: surface,
-        border: Border.all(color: iceBlue.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Row(
-        children: [
-          const Text('🧊', style: TextStyle(fontSize: 18)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isTodayFrozen
-                      ? 'Streak frozen today'
-                      : '${habit.streakFreezes} freeze${habit.streakFreezes == 1 ? '' : 's'} available',
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isTodayFrozen
-                      ? 'Your streak is protected for today'
-                      : 'Use a freeze to protect your streak on a missed day',
-                  style: TextStyle(color: textMuted, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          if (isTodayMissed && !isTodayFrozen && habit.streakFreezes > 0) ...[
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: () async {
-                HapticFeedback.mediumImpact();
-                await ref
-                    .read(habitRepositoryProvider)
-                    .useFreeze(habitId: habit.id, date: today);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(7),
-                  color: iceBlue.withValues(alpha: 0.12),
-                  border: Border.all(
-                    color: iceBlue.withValues(alpha: 0.4),
-                    width: 1,
-                  ),
-                ),
-                child: const Text(
-                  'Use Freeze',
-                  style: TextStyle(
-                    color: iceBlue,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }
 
@@ -971,21 +894,66 @@ class _HeroHeader extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 3),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: accentColor,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: accentColor,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  _frequencyLabel(habit),
+                                  style: TextStyle(
+                                    color: textMuted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (habit.reminderTime != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  color: accentColor.withValues(alpha: 0.12),
+                                  border: Border.all(
+                                    color: accentColor.withValues(alpha: 0.25),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.notifications_outlined,
+                                      size: 10,
+                                      color: accentColor,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      _formatReminderTime(habit.reminderTime!),
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _frequencyLabel(habit),
-                              style: TextStyle(color: textMuted, fontSize: 12),
-                            ),
                           ],
                         ),
                       ],
@@ -1009,6 +977,18 @@ class _HeroHeader extends StatelessWidget {
         return '${config.timesPerWeek}× per week';
       }(),
     };
+  }
+
+  /// Converts stored "HH:mm" to a human-readable "9:00 AM" / "9:00 PM" string.
+  String _formatReminderTime(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return hhmm;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    final period = hour < 12 ? 'AM' : 'PM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final displayMinute = minute.toString().padLeft(2, '0');
+    return '$displayHour:$displayMinute $period';
   }
 }
 

@@ -18,7 +18,6 @@ class GuestExpiredInterstitial extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? AppColors.background : AppColors.backgroundLight;
     final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
-    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
     final textPrimary = isDark
         ? AppColors.textPrimary
         : AppColors.textPrimaryLight;
@@ -120,38 +119,6 @@ class GuestExpiredInterstitial extends ConsumerWidget {
                     ),
                   )
                   .animate(delay: 260.ms)
-                  .fadeIn(duration: 400.ms)
-                  .slideY(begin: 0.1, end: 0),
-
-              const SizedBox(height: 12),
-
-              // ── Secondary CTA — flat outline ───────────────────────────
-              GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const LinkAccountScreen(),
-                      ),
-                    ),
-                    child: Container(
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: surfaceColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: borderColor, width: 1),
-                      ),
-                      child: Center(
-                        child: Text(
-                          AppCopy.linkWithEmail,
-                          style: TextStyle(
-                            color: textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                  .animate(delay: 320.ms)
                   .fadeIn(duration: 400.ms)
                   .slideY(begin: 0.1, end: 0),
 

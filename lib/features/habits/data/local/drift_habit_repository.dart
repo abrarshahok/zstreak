@@ -55,6 +55,7 @@ class DriftHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     final now = DateTime.now();
     final row = HabitsCompanion.insert(
@@ -65,6 +66,7 @@ class DriftHabitRepository implements HabitRepository {
       frequencyType: frequencyType.toDbValue(),
       frequencyConfig: jsonEncode(frequencyConfig.toJson()),
       reminderTime: Value(reminderTime),
+      description: Value(description),
       createdAt: now,
       updatedAt: now,
     );
@@ -187,7 +189,6 @@ class DriftHabitRepository implements HabitRepository {
       frequencyConfig: habit.frequencyConfig,
       createdAtLocal: habit.createdAt,
       completedDates: completedDates,
-      frozenDates: habit.frozenDates,
       today: DateTime.now(),
     );
 
@@ -210,6 +211,7 @@ class DriftHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     final existing = await (_db.select(
       _db.habits,
@@ -225,6 +227,7 @@ class DriftHabitRepository implements HabitRepository {
         frequencyType: Value(frequencyType.toDbValue()),
         frequencyConfig: Value(jsonEncode(frequencyConfig.toJson())),
         reminderTime: Value(reminderTime),
+        description: Value(description),
         // Frequency-type changes reset the active streak, never history or
         // the longest-streak record (spec Section 5a).
         currentStreak: frequencyChanged ? const Value(0) : const Value.absent(),
@@ -260,30 +263,6 @@ class DriftHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<void> useFreeze({
-    required String habitId,
-    required String date,
-  }) async {
-    final row = await (_db.select(
-      _db.habits,
-    )..where((h) => h.id.equals(habitId))).getSingleOrNull();
-    if (row == null || row.streakFreezes <= 0) return;
-
-    final existing = _parseFrozenDates(row.frozenDates);
-    if (existing.contains(date)) return; // already frozen
-
-    final updated = {...existing, date};
-    await (_db.update(_db.habits)..where((h) => h.id.equals(habitId))).write(
-      HabitsCompanion(
-        streakFreezes: Value(row.streakFreezes - 1),
-        frozenDates: Value(jsonEncode(updated.toList())),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-    await _recalculateStreak(habitId);
-  }
-
-  @override
   Future<void> reorderHabits(List<String> orderedIds) async {
     await _db.transaction(() async {
       for (var i = 0; i < orderedIds.length; i++) {
@@ -300,40 +279,18 @@ class DriftHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     required DateTime createdAt,
   }) {
-    // Watch both check-ins and the habit row so frozen-date changes also
-    // trigger a recompute.
     final checkInQuery = _db.select(_db.checkIns)
       ..where((c) => c.habitId.equals(habitId) & c.completed.equals(true));
-    final habitQuery = _db.select(_db.habits)
-      ..where((h) => h.id.equals(habitId));
 
-    return checkInQuery.watch().asyncExpand((checkInRows) {
-      return habitQuery.watchSingleOrNull().map((habitRow) {
-        final frozenDates = habitRow != null
-            ? _parseFrozenDates(habitRow.frozenDates)
-            : const <String>{};
-        return StreakCalculator.compute(
-          frequencyType: frequencyType,
-          frequencyConfig: frequencyConfig,
-          createdAtLocal: createdAt,
-          completedDates: checkInRows.map((r) => r.date).toSet(),
-          frozenDates: frozenDates,
-          today: DateTime.now(),
-        );
-      });
+    return checkInQuery.watch().map((checkInRows) {
+      return StreakCalculator.compute(
+        frequencyType: frequencyType,
+        frequencyConfig: frequencyConfig,
+        createdAtLocal: createdAt,
+        completedDates: checkInRows.map((r) => r.date).toSet(),
+        today: DateTime.now(),
+      );
     });
-  }
-
-  /// Parses the JSON-encoded frozen-dates string stored in the DB.
-  /// Returns an empty set if the value is null or malformed.
-  static Set<String> _parseFrozenDates(String? raw) {
-    if (raw == null || raw.isEmpty) return const {};
-    try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list.cast<String>().toSet();
-    } catch (_) {
-      return const {};
-    }
   }
 
   Habit _toDomain(HabitRow row) {
@@ -349,13 +306,12 @@ class DriftHabitRepository implements HabitRepository {
         jsonDecode(row.frequencyConfig) as Map<String, dynamic>,
       ),
       reminderTime: row.reminderTime,
+      description: row.description,
       currentStreak: row.currentStreak,
       longestStreak: row.longestStreak,
       createdAt: row.createdAt,
       archivedAt: row.archivedAt,
       updatedAt: row.updatedAt,
-      streakFreezes: row.streakFreezes,
-      frozenDates: _parseFrozenDates(row.frozenDates),
       sortOrder: row.sortOrder,
     );
   }

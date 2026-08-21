@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,9 +19,19 @@ import '../application/user_profile_provider.dart';
 /// The user never sees a sign-in/sign-up screen unless they choose to
 /// "Sync to cloud" later from Settings or the in-app banner.
 class UserProfileQuestionsScreen extends ConsumerStatefulWidget {
-  const UserProfileQuestionsScreen({super.key, this.skipToSignIn = false});
+  const UserProfileQuestionsScreen({
+    super.key,
+    this.skipToSignIn = false,
+    this.alreadySignedIn = false,
+  });
 
   final bool skipToSignIn;
+
+  /// True when the user is already signed in with a real account (Google /
+  /// email link) but skipped the questionnaire. In this mode the screen
+  /// saves profile data directly to Firestore and then marks onboarding
+  /// complete so [AuthGate] routes to Home.
+  final bool alreadySignedIn;
 
   @override
   ConsumerState<UserProfileQuestionsScreen> createState() =>
@@ -38,6 +49,8 @@ class _UserProfileQuestionsScreenState
   final _nameCtrl = TextEditingController();
 
   // Step 1 — Age (drum picker)
+  // Starts at 22 as a visual default. Whatever is shown when the user
+  // presses Continue is saved — the wheel always has a valid selection.
   int _selectedAge = 22;
 
   // Step 2 — Gender
@@ -80,6 +93,7 @@ class _UserProfileQuestionsScreenState
   }
 
   void _next() {
+    FocusScope.of(context).unfocus();
     _saveCurrentStep();
     if (_step < _totalSteps - 1) {
       _pageController.nextPage(
@@ -97,8 +111,13 @@ class _UserProfileQuestionsScreenState
         duration: const Duration(milliseconds: 380),
         curve: Curves.easeInOut,
       );
-    } else {
+    } else if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
+    } else {
+      // This screen is the root route (e.g. AuthGate rendered it directly
+      // for a signed-in user with no profile). Pop the whole app instead
+      // of leaving a black screen.
+      SystemNavigator.pop();
     }
   }
 
@@ -118,17 +137,28 @@ class _UserProfileQuestionsScreenState
 
   Future<void> _finishAndEnterApp() async {
     final notifier = ref.read(userProfileProvider.notifier);
-    await notifier.setName(_nameCtrl.text);
-    await notifier.setAge(_selectedAge.toString());
-    if (_gender != null) await notifier.setGender(_gender!);
-    await notifier.setGoals(_goals);
+    final authRepo = ref.read(authRepositoryProvider);
+    final uid = authRepo.currentUser?.uid;
+    final isSignedIn =
+        widget.alreadySignedIn ||
+        (authRepo.currentUser != null &&
+            authRepo.currentUser!.isAnonymous == false);
+
+    // Save locally (and push to Firestore if already signed in with Google).
+    await notifier.setName(_nameCtrl.text, uid: isSignedIn ? uid : null);
+    await notifier.setAge(
+      _selectedAge.toString(),
+      uid: isSignedIn ? uid : null,
+    );
+    if (_gender != null) {
+      await notifier.setGender(_gender!, uid: isSignedIn ? uid : null);
+    }
+    await notifier.setGoals(_goals, uid: isSignedIn ? uid : null);
 
     await markOnboardingComplete(ref);
 
     setState(() => _isBusy = true);
     try {
-      final authRepo = ref.read(authRepositoryProvider);
-
       if (authRepo.currentUser != null) {
         if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
@@ -141,6 +171,15 @@ class _UserProfileQuestionsScreenState
 
       await authRepo.signInAnonymously();
       await ref.read(analyticsServiceProvider).logGuestStarted();
+      // Navigate after successful anonymous sign-in.
+      // AuthGate rebuilds via the auth stream, but UserProfileQuestionsScreen
+      // is still on the stack on top of it — we must pop to AuthGate explicitly.
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthGate()),
+          (_) => false,
+        );
+      }
     } catch (e, st) {
       debugPrint('signInAnonymously failed: $e\n$st');
       if (mounted) {
@@ -210,22 +249,18 @@ class _UserProfileQuestionsScreenState
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Row(
                 children: [
-                  // Back button — flat circle, 1px border
-                  GestureDetector(
-                    onTap: _back,
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: surfaceColor,
-                        border: Border.all(color: borderColor, width: 1),
-                      ),
-                      child: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 15,
-                        color: textPrimary,
-                      ),
+                  // Back button — plain icon, no border
+                  IconButton(
+                    onPressed: _back,
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: textPrimary,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 38,
+                      minHeight: 38,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -278,7 +313,9 @@ class _UserProfileQuestionsScreenState
                     selectedAge: _selectedAge,
                     minAge: _minAge,
                     maxAge: _maxAge,
-                    onChanged: (age) => setState(() => _selectedAge = age),
+                    onChanged: (age) => setState(() {
+                      _selectedAge = age;
+                    }),
                     accent: accent,
                     textPrimary: textPrimary,
                     textMuted: textMuted,

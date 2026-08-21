@@ -5,19 +5,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../data_export/data_export_providers.dart';
 import '../../guest/application/guest_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
+import '../../monetization/presentation/paywall_screen.dart';
 import '../application/account_linking_providers.dart';
 import 'merge_summary_screen.dart';
 
 /// Account linking — upgrades the current anonymous guest to a permanent
 /// account via `linkWithCredential`, then migrates local Drift data to
 /// Firestore. Flat design, theme-aware.
+///
+/// [thenPaywall] — when `true`, navigates to [PaywallScreen] after a
+/// successful link instead of popping to root. Used when the user came
+/// from the "Go Pro" guest gate.
 class LinkAccountScreen extends ConsumerStatefulWidget {
-  const LinkAccountScreen({super.key});
+  const LinkAccountScreen({super.key, this.thenPaywall = false});
+
+  final bool thenPaywall;
 
   @override
   ConsumerState<LinkAccountScreen> createState() => _LinkAccountScreenState();
@@ -38,30 +46,6 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
           await _offerMerge(
             method: 'google',
             signInDirectly: repo.signInWithGoogleDirectly,
-          );
-        } else {
-          _showError(AppCopy.errorGeneric);
-        }
-      }
-    });
-  }
-
-  Future<void> _linkEmail() async {
-    final result = await _promptEmailPassword();
-    if (result == null) return;
-    final repo = ref.read(authRepositoryProvider);
-    await _run(() async {
-      try {
-        await repo.linkWithEmail(email: result.$1, password: result.$2);
-        await _finish(isMerge: false, method: 'email');
-      } on FirebaseAuthException catch (e) {
-        if (_isConflict(e)) {
-          await _offerMerge(
-            method: 'email',
-            signInDirectly: () => repo.signInWithEmailDirectly(
-              email: result.$1,
-              password: result.$2,
-            ),
           );
         } else {
           _showError(AppCopy.errorGeneric);
@@ -131,70 +115,19 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
         MaterialPageRoute(builder: (_) => MergeSummaryScreen(outcome: outcome)),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Synced. Your streak is safe now.')),
+      AppSnackBar.show(
+        context,
+        'Synced. Your streak is safe now.',
+        type: SnackBarType.success,
       );
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      if (widget.thenPaywall) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PaywallScreen()),
+        );
+      } else {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     }
-  }
-
-  Future<(String, String)?> _promptEmailPassword() {
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return showModalBottomSheet<(String, String)>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? AppColors.surface : AppColors.surfaceLight,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
-          bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : Colors.black.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(hintText: 'Email'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(hintText: 'Password'),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.of(
-                context,
-              ).pop((emailController.text.trim(), passwordController.text)),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -208,9 +141,7 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    AppSnackBar.show(context, message, type: SnackBarType.error);
   }
 
   @override
@@ -332,21 +263,6 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
                   .fadeIn(duration: 350.ms)
                   .slideY(begin: 0.08, end: 0),
 
-              const SizedBox(height: 12),
-
-              // ── Email button — flat outline ────────────────────────────
-              _OutlineButton(
-                    label: AppCopy.linkWithEmail,
-                    textPrimary: textPrimary,
-                    surfaceColor: surfaceColor,
-                    borderColor: borderColor,
-                    isBusy: _isBusy,
-                    onTap: _isBusy ? null : _linkEmail,
-                  )
-                  .animate(delay: 260.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.08, end: 0),
-
               const SizedBox(height: 24),
 
               // ── Export data ───────────────────────────────────────────
@@ -416,54 +332,6 @@ class _FlatButton extends StatelessWidget {
                       fontSize: 15,
                     ),
                   ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Flat outline button ───────────────────────────────────────────────────────
-
-class _OutlineButton extends StatelessWidget {
-  const _OutlineButton({
-    required this.label,
-    required this.textPrimary,
-    required this.surfaceColor,
-    required this.borderColor,
-    required this.isBusy,
-    required this.onTap,
-  });
-  final String label;
-  final Color textPrimary;
-  final Color surfaceColor;
-  final Color borderColor;
-  final bool isBusy;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedOpacity(
-        opacity: isBusy ? 0.5 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          height: 54,
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-              ),
-            ),
           ),
         ),
       ),

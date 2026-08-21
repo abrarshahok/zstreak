@@ -12,6 +12,10 @@ class Habits extends Table {
   TextColumn get frequencyType => text()();
   TextColumn get frequencyConfig => text()();
   TextColumn get reminderTime => text().nullable()();
+
+  /// Optional free-text description of what the user plans to track.
+  TextColumn get description => text().nullable()();
+
   IntColumn get currentStreak => integer().withDefault(const Constant(0))();
   IntColumn get longestStreak => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();

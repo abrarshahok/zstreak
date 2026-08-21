@@ -4,5 +4,5 @@
 class AppConfig {
   AppConfig._();
 
-  static const int freeTierHabitLimit = 2;
+  static const int freeTierHabitLimit = 3;
 }

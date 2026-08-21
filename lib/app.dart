@@ -11,6 +11,7 @@ import 'features/habits/application/habit_providers.dart';
 import 'features/habits/presentation/habit_detail_screen.dart';
 import 'features/monetization/application/entitlement_providers.dart';
 import 'features/notifications/application/notification_providers.dart';
+import 'features/onboarding/application/user_profile_provider.dart';
 import 'features/widgets/presentation/widget_configure_screen.dart';
 
 final navigatorKeyProvider = Provider((ref) => GlobalKey<NavigatorState>());
@@ -28,16 +29,53 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
   @override
   void initState() {
     super.initState();
-    ref.read(notificationServiceProvider).initialize(onHabitTapped: _openHabit);
-    ref.read(revenueCatServiceProvider).initialize();
+    _initNotifications();
+    _initRevenueCat();
     _checkWidgetConfigureLaunch();
+    _refreshNotifications();
+  }
+
+  /// Initialize the notification plugin and request POST_NOTIFICATIONS
+  /// permission on Android 13+ (API 33+). This is idempotent — Android
+  /// only shows the system dialog once; if the user already granted or
+  /// permanently denied it, the call is a silent no-op.
+  Future<void> _initNotifications() async {
+    final svc = ref.read(notificationServiceProvider);
+    await svc.initialize(onHabitTapped: _openHabit);
+    await svc.requestNotificationPermission();
+  }
+
+  Future<void> _refreshNotifications() async {
+    // Run after the first frame so providers are fully settled.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(notificationOrchestratorProvider).refresh();
+      } catch (_) {
+        // Non-fatal — notifications are best-effort.
+      }
+    });
+  }
+
+  /// Initialize RevenueCat and immediately log in the current Firebase user
+  /// (if one already exists). Without this, the first app launch after a
+  /// cold start never calls [RevenueCatService.logIn] because the
+  /// [authStateProvider] listener below only fires on *changes*, not on the
+  /// already-resolved initial value.
+  Future<void> _initRevenueCat() async {
+    final service = ref.read(revenueCatServiceProvider);
+    await service.initialize();
+    final uid = ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid != null) {
+      await service.logIn(uid);
+    }
   }
 
   /// Android launches us specially the moment a widget instance is
   /// placed (spec Section 2) — that takes over the whole app instead of
   /// the normal auth-gated flow until a habit is chosen.
   Future<void> _checkWidgetConfigureLaunch() async {
-    final idString = await HomeWidget.initiallyLaunchedFromHomeWidgetConfigure();
+    final idString =
+        await HomeWidget.initiallyLaunchedFromHomeWidgetConfigure();
     final id = idString == null ? null : int.tryParse(idString);
     if (id != null && mounted) setState(() => _configuringWidgetId = id);
   }
@@ -48,7 +86,9 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
     ref
         .read(navigatorKeyProvider)
         .currentState
-        ?.push(MaterialPageRoute(builder: (_) => HabitDetailScreen(habit: habit)));
+        ?.push(
+          MaterialPageRoute(builder: (_) => HabitDetailScreen(habit: habit)),
+        );
   }
 
   @override
@@ -57,10 +97,16 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
     // the anonymous guest uid, so a guest's purchase survives a normal
     // link since Stage 6 never changes the uid on that path.
     ref.listen(authStateProvider, (previous, next) {
-      final uid = next.valueOrNull?.uid;
+      final user = next.valueOrNull;
+      final uid = user?.uid;
       final service = ref.read(revenueCatServiceProvider);
       if (uid != null) {
         service.logIn(uid);
+        // Sync user profile from Firestore when a non-anonymous user signs in.
+        // This restores name/age/gender/goals on a new device or after reinstall.
+        if (user?.isAnonymous == false) {
+          ref.read(userProfileProvider.notifier).syncFromFirestore(uid);
+        }
       } else {
         service.logOut();
       }

@@ -3,9 +3,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 /// Thin wrapper around Firebase Auth + Google Sign-In.
 ///
-/// Only three sign-in paths exist (spec Section 2): anonymous (guest),
-/// Google, and email/password. Stage 6 adds account linking — upgrading
-/// the current anonymous user to a permanent one — on top of these.
+/// Sign-in paths (spec Section 2):
+///   - Anonymous (guest)
+///   - Google
+///
+/// Stage 6 adds account linking — upgrading the current anonymous user to a
+/// permanent one — on top of these.
 class AuthRepository {
   AuthRepository({FirebaseAuth? firebaseAuth, GoogleSignIn? googleSignIn})
     : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
@@ -28,22 +31,6 @@ class AuthRepository {
     return _firebaseAuth.signInWithCredential(credential);
   }
 
-  Future<void> signInWithEmail({
-    required String email,
-    required String password,
-  }) => _firebaseAuth.signInWithEmailAndPassword(
-    email: email,
-    password: password,
-  );
-
-  Future<void> registerWithEmail({
-    required String email,
-    required String password,
-  }) => _firebaseAuth.createUserWithEmailAndPassword(
-    email: email,
-    password: password,
-  );
-
   /// Upgrades the current anonymous user in place (spec Section 3a) — the
   /// uid never changes, so Firestore docs written after this call are
   /// already correctly scoped. Returns null if the user cancels the
@@ -56,16 +43,6 @@ class AuthRepository {
     return _requireCurrentUser().linkWithCredential(credential);
   }
 
-  /// Same upgrade-in-place contract as [linkWithGoogle]; throws with code
-  /// `email-already-in-use` on conflict.
-  Future<UserCredential> linkWithEmail({
-    required String email,
-    required String password,
-  }) {
-    final credential = EmailAuthProvider.credential(email: email, password: password);
-    return _requireCurrentUser().linkWithCredential(credential);
-  }
-
   /// Abandons the anonymous session and signs into the pre-existing
   /// account instead — the manual-merge path after a link conflict
   /// (Section 3a). The caller is responsible for migrating the abandoned
@@ -75,14 +52,6 @@ class AuthRepository {
     if (credential == null) return;
     await _firebaseAuth.signInWithCredential(credential);
   }
-
-  Future<void> signInWithEmailDirectly({
-    required String email,
-    required String password,
-  }) => signInWithEmail(email: email, password: password);
-
-  Future<void> sendPasswordResetEmail(String email) =>
-      _firebaseAuth.sendPasswordResetEmail(email: email);
 
   Future<AuthCredential?> _getGoogleCredential() async {
     await _googleSignIn.initialize();

@@ -24,19 +24,24 @@ class FirestoreHabitRepository implements HabitRepository {
   @override
   Stream<List<Habit>> watchActiveHabits() {
     // Feature 6: sort by sortOrder first, then createdAt as tiebreaker.
+    // Limit to 50 — a safety cap. Free users are capped at 3 by the app;
+    // Pro users realistically have 5–30. Nobody has 1000 habits.
     return _habits
         .where('archivedAt', isNull: true)
         .orderBy('sortOrder')
         .orderBy('createdAt')
+        .limit(50)
         .snapshots()
         .map((snap) => snap.docs.map(_toDomain).toList());
   }
 
   @override
   Stream<List<Habit>> watchArchivedHabits() {
+    // Limit to 50 — consistent with watchActiveHabits.
     return _habits
         .where('archivedAt', isNull: false)
         .orderBy('archivedAt', descending: true)
+        .limit(50)
         .snapshots()
         .map((snap) => snap.docs.map(_toDomain).toList());
   }
@@ -55,6 +60,7 @@ class FirestoreHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     final id = _uuid.v4();
     final now = DateTime.now();
@@ -66,6 +72,7 @@ class FirestoreHabitRepository implements HabitRepository {
       'frequencyType': frequencyType.toDbValue(),
       'frequencyConfig': frequencyConfig.toJson(),
       'reminderTime': reminderTime,
+      'description': description,
       'currentStreak': 0,
       'longestStreak': 0,
       'createdAt': Timestamp.fromDate(now),
@@ -101,9 +108,14 @@ class FirestoreHabitRepository implements HabitRepository {
 
   @override
   Stream<List<CheckIn>> watchHabitCheckIns(String habitId) {
+    // Order by loggedAt descending so the most recent 400 check-ins are
+    // fetched — the contribution grid and analytics screen only display
+    // the most recent ~365 days, so older data is never needed.
     return _habits
         .doc(habitId)
         .collection('check_ins')
+        .orderBy('loggedAt', descending: true)
+        .limit(400)
         .snapshots()
         .map(
           (snap) => snap.docs.map((doc) {
@@ -145,10 +157,13 @@ class FirestoreHabitRepository implements HabitRepository {
     final habitDoc = await _habits.doc(habitId).get();
     final habit = _toDomain(habitDoc);
 
+    // Limit to 400 documents — caps Firestore reads per tap without
+    // affecting correctness for any realistic streak length.
     final checkInsSnap = await _habits
         .doc(habitId)
         .collection('check_ins')
         .where('completed', isEqualTo: true)
+        .limit(400)
         .get();
     final completedDates = checkInsSnap.docs.map((d) => d.id).toSet();
 
@@ -157,7 +172,6 @@ class FirestoreHabitRepository implements HabitRepository {
       frequencyConfig: habit.frequencyConfig,
       createdAtLocal: habit.createdAt,
       completedDates: completedDates,
-      frozenDates: habit.frozenDates,
       today: DateTime.now(),
     );
 
@@ -178,6 +192,7 @@ class FirestoreHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     final existing = _toDomain(await _habits.doc(id).get());
     final frequencyChanged = existing.frequencyType != frequencyType;
@@ -189,6 +204,7 @@ class FirestoreHabitRepository implements HabitRepository {
       'frequencyType': frequencyType.toDbValue(),
       'frequencyConfig': frequencyConfig.toJson(),
       'reminderTime': reminderTime,
+      'description': description,
       if (frequencyChanged) 'currentStreak': 0,
       'updatedAt': Timestamp.now(),
     });
@@ -209,38 +225,29 @@ class FirestoreHabitRepository implements HabitRepository {
   @override
   Future<void> deleteHabit(String id) async {
     // Firestore doesn't cascade-delete subcollections on doc delete.
-    final checkIns = await _habits.doc(id).collection('check_ins').get();
-    final batch = _firestore.batch();
-    for (final doc in checkIns.docs) {
-      batch.delete(doc.reference);
+    // Firestore batch limit is 500 operations per commit. A power user
+    // with years of daily check-ins can have 1000+ documents, which would
+    // overflow a single batch and throw. We page through in chunks of 400
+    // (leaving headroom for the final habit-doc delete).
+    const batchSize = 400;
+    final checkInsRef = _habits.doc(id).collection('check_ins');
+
+    while (true) {
+      final snap = await checkInsRef.limit(batchSize).get();
+      if (snap.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      // If fewer docs than the page size were returned, we've deleted all.
+      if (snap.docs.length < batchSize) break;
     }
-    batch.delete(_habits.doc(id));
-    await batch.commit();
-  }
 
-  @override
-  Future<void> useFreeze({
-    required String habitId,
-    required String date,
-  }) async {
-    final doc = await _habits.doc(habitId).get();
-    if (!doc.exists) return;
-    final data = doc.data()!;
-    final freezes = data['streakFreezes'] as int? ?? 0;
-    if (freezes <= 0) return;
-
-    final rawFrozen = data['frozenDates'];
-    final existing = rawFrozen is List
-        ? rawFrozen.cast<String>().toSet()
-        : <String>{};
-    if (existing.contains(date)) return;
-
-    await _habits.doc(habitId).update({
-      'streakFreezes': freezes - 1,
-      'frozenDates': [...existing, date],
-      'updatedAt': Timestamp.now(),
-    });
-    await _recalculateStreak(habitId);
+    // Delete the habit document itself after all check-ins are gone.
+    await _habits.doc(id).delete();
   }
 
   @override
@@ -259,10 +266,13 @@ class FirestoreHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     required DateTime createdAt,
   }) {
+    // Limit to 400 — caps the realtime listener document count without
+    // affecting correctness for any realistic streak length.
     return _habits
         .doc(habitId)
         .collection('check_ins')
         .where('completed', isEqualTo: true)
+        .limit(400)
         .snapshots()
         .map((snap) {
           return StreakCalculator.compute(
@@ -279,12 +289,6 @@ class FirestoreHabitRepository implements HabitRepository {
     final data = doc.data()!;
     final type = FrequencyType.fromDbValue(data['frequencyType'] as String);
 
-    // Feature 1: parse frozen dates stored as a Firestore list of strings.
-    final rawFrozen = data['frozenDates'];
-    final frozenDates = rawFrozen is List
-        ? rawFrozen.cast<String>().toSet()
-        : const <String>{};
-
     return Habit(
       id: doc.id,
       name: data['name'] as String,
@@ -296,13 +300,12 @@ class FirestoreHabitRepository implements HabitRepository {
         Map<String, dynamic>.from(data['frequencyConfig'] as Map),
       ),
       reminderTime: data['reminderTime'] as String?,
+      description: data['description'] as String?,
       currentStreak: data['currentStreak'] as int? ?? 0,
       longestStreak: data['longestStreak'] as int? ?? 0,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       archivedAt: (data['archivedAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
-      streakFreezes: data['streakFreezes'] as int? ?? 1,
-      frozenDates: frozenDates,
       sortOrder: data['sortOrder'] as int? ?? 0,
     );
   }

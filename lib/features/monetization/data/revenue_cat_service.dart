@@ -1,3 +1,5 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import 'revenue_cat_config.dart';
@@ -12,7 +14,7 @@ import 'revenue_cat_config.dart';
 /// link — no RevenueCat-side merge needed for that path.
 class RevenueCatService {
   Future<void> initialize() async {
-    await Purchases.setLogLevel(LogLevel.warn);
+    await Purchases.setLogLevel(kDebugMode ? LogLevel.debug : LogLevel.warn);
     await Purchases.configure(
       PurchasesConfiguration(RevenueCatConfig.androidApiKey),
     );
@@ -45,11 +47,25 @@ class RevenueCatService {
   Future<bool> hasActiveEntitlement() async {
     try {
       final info = await Purchases.getCustomerInfo();
-      return info.entitlements.active.containsKey(
-        RevenueCatConfig.premiumEntitlementId,
-      );
-    } catch (_) {
+      final active = info.entitlements.active;
+      if (kDebugMode) {
+        debugPrint('[RC] active entitlements: ${active.keys.toList()}');
+        debugPrint(
+          '[RC] checking for: ${RevenueCatConfig.premiumEntitlementId}',
+        );
+      }
+      return active.containsKey(RevenueCatConfig.premiumEntitlementId);
+    } catch (e, st) {
       // Fail closed — never grant premium features on a lookup error.
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'RC entitlement check',
+        );
+      } else {
+        debugPrint('[RC] hasActiveEntitlement error: $e');
+      }
       return false;
     }
   }

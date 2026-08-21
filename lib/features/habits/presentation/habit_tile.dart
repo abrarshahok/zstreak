@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
 import '../../analytics/analytics_service.dart';
+import '../../notifications/application/notification_providers.dart';
 import '../../reviews/review_prompt_service.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
@@ -54,6 +55,16 @@ class HabitTile extends ConsumerWidget {
       await ref
           .read(analyticsServiceProvider)
           .logStreakMilestone(habitId: habit.id, streak: updated.currentStreak);
+
+      // Fire milestone notification + cancel streak-at-risk alert.
+      await ref
+          .read(notificationOrchestratorProvider)
+          .onCheckIn(
+            habitId: habit.id,
+            habitName: habit.name,
+            habitEmoji: habit.emoji,
+            newStreak: updated.currentStreak,
+          );
 
       if (context.mounted) {
         await maybeShowMilestoneOverlay(
@@ -194,46 +205,6 @@ class HabitTile extends ConsumerWidget {
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                              // 🧊 Freeze badge
-                              if (habit.streakFreezes > 0) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    color: const Color(
-                                      0xFF00BFFF,
-                                    ).withValues(alpha: 0.15),
-                                    border: Border.all(
-                                      color: const Color(
-                                        0xFF00BFFF,
-                                      ).withValues(alpha: 0.4),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        '🧊',
-                                        style: TextStyle(fontSize: 9),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        '${habit.streakFreezes}',
-                                        style: const TextStyle(
-                                          color: Color(0xFF00BFFF),
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ],

@@ -14,5 +14,14 @@
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Make status bar and navigation bar transparent so Flutter draws
+             edge-to-edge behind them. Flutter controls icon brightness via
+             SystemUiOverlayStyle. Required for API 29+. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Android 15 (API 35) enforces edge-to-edge by default. This opt-in
+             flag silences the deprecation warning on older APIs and ensures
+             consistent behaviour across all API levels. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">false</item>
     </style>
 </resources>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// ZStreak design tokens — minimal, flat, no gradients.
@@ -196,8 +197,9 @@ class AppTheme {
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
-        backgroundColor: AppColors.surfaceElevated,
-        contentTextStyle: TextStyle(color: AppColors.textPrimary),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
       ),
       listTileTheme: const ListTileThemeData(
         tileColor: Colors.transparent,
@@ -209,6 +211,16 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        // Light icons on dark background; transparent bars so Flutter draws
+        // edge-to-edge behind the status bar and navigation bar.
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.background,
@@ -331,8 +343,9 @@ class AppTheme {
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
-        backgroundColor: AppColors.surfaceLight,
-        contentTextStyle: TextStyle(color: AppColors.textPrimaryLight),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
       ),
       listTileTheme: const ListTileThemeData(
         tileColor: Colors.transparent,
@@ -344,6 +357,16 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        // Dark icons on light background; transparent bars so Flutter draws
+        // edge-to-edge behind the status bar and navigation bar.
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.backgroundLight,

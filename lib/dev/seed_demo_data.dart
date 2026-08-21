@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
@@ -12,8 +10,7 @@ import '../features/habits/domain/streak_calculator.dart';
 /// instead of empty. Not wired into any shipped screen — invoked once
 /// from a temporary debug hook and removed afterward.
 ///
-/// Updated to include Feature 1 (streakFreezes, frozenDates),
-/// Feature 2 (check-in notes), and Feature 6 (sortOrder).
+/// Includes Feature 2 (check-in notes) and Feature 6 (sortOrder).
 class _HabitSpec {
   _HabitSpec({
     required this.name,
@@ -23,9 +20,8 @@ class _HabitSpec {
     required this.frequencyConfig,
     required this.createdDaysAgo,
     required this.completedDaysAgo,
+    this.description,
     this.archivedDaysAgo,
-    this.streakFreezes = 1,
-    this.frozenDatesAgo = const {},
     this.notedDaysAgo = const {},
   });
 
@@ -36,13 +32,8 @@ class _HabitSpec {
   final FrequencyConfig frequencyConfig;
   final int createdDaysAgo;
   final Set<int> completedDaysAgo;
+  final String? description;
   final int? archivedDaysAgo;
-
-  /// Feature 1 – remaining freeze tokens (0–3).
-  final int streakFreezes;
-
-  /// Feature 1 – days-ago offsets that were frozen (missed but protected).
-  final Set<int> frozenDatesAgo;
 
   /// Feature 2 – days-ago offsets that have a demo note attached.
   /// Maps offset → note text.
@@ -65,11 +56,6 @@ Future<void> seedDemoData(FirebaseFirestore firestore, String uid) async {
         .map((d) => localDateString(today.subtract(Duration(days: d))))
         .toSet();
 
-    // Feature 1 – frozen dates as date strings
-    final frozenDateStrings = spec.frozenDatesAgo
-        .map((d) => localDateString(today.subtract(Duration(days: d))))
-        .toList();
-
     final result = StreakCalculator.compute(
       frequencyType: spec.frequencyType,
       frequencyConfig: spec.frequencyConfig,
@@ -86,6 +72,7 @@ Future<void> seedDemoData(FirebaseFirestore firestore, String uid) async {
       'frequencyType': spec.frequencyType.toDbValue(),
       'frequencyConfig': spec.frequencyConfig.toJson(),
       'reminderTime': null,
+      'description': spec.description,
       'currentStreak': result.currentStreak,
       'longestStreak': result.longestStreak,
       'createdAt': Timestamp.fromDate(createdAt),
@@ -95,9 +82,6 @@ Future<void> seedDemoData(FirebaseFirestore firestore, String uid) async {
               today.subtract(Duration(days: spec.archivedDaysAgo!)),
             ),
       'updatedAt': Timestamp.now(),
-      // Feature 1 – Streak Freeze
-      'streakFreezes': spec.streakFreezes,
-      'frozenDates': jsonEncode(frozenDateStrings),
       // Feature 6 – Sort order (insertion order = display order)
       'sortOrder': i,
     });
@@ -186,8 +170,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     // ── ACTIVE HABITS ──────────────────────────────────────────────────────
 
     // 1. Morning Run — 180-day near-perfect streak, a few sick days
-    //    Has 2 frozen dates (sick days protected), 1 freeze remaining
-    //    Notes on milestone days and recent runs
     _HabitSpec(
       name: 'Morning Run',
       emoji: '🏃',
@@ -195,24 +177,23 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 180,
+      description:
+          'Run at least 3 km every morning before breakfast. Track pace and distance in Nike Run Club.',
       completedDaysAgo: _daysAgoRange(
         180,
         0,
         except: {120, 119, 60, 59, 58, 30, 14, 7},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {30, 14}, // two past sick days were frozen
       notedDaysAgo: {
         0: 'PB today — 5k in 24:12! 🔥',
         1: 'Rainy but pushed through',
         7: '7-day milestone, feeling great',
         21: 'Three weeks back on track',
-        30: 'Felt sick but used freeze — glad I did',
+        30: 'Felt sick but pushed through anyway',
       },
     ),
 
     // 2. Read 20 Pages — 365-day habit, very consistent, a few holiday gaps
-    //    Notes on books finished, 2 freezes remaining (avid reader, rarely needs them)
     _HabitSpec(
       name: 'Read 20 Pages',
       emoji: '📚',
@@ -220,13 +201,13 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 365,
+      description:
+          'Read at least 20 pages of a non-fiction book every day. No phones, no distractions.',
       completedDaysAgo: _humanDaily(
         365,
         missEvery: 11,
         extraMiss: {200, 199, 150, 100, 99, 50, 49, 48},
       ),
-      streakFreezes: 2,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Finished Atomic Habits — 10/10',
         3: 'Started Deep Work by Cal Newport',
@@ -237,7 +218,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 3. Drink 3L Water — 90-day perfect streak
-    //    Simple habit, no notes needed, 1 freeze available
     _HabitSpec(
       name: 'Drink 3L Water',
       emoji: '💧',
@@ -245,9 +225,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 90,
+      description:
+          'Drink 3 litres of water throughout the day. Use the marked water bottle to track intake.',
       completedDaysAgo: _daysAgoRange(90, 0),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Added lemon — tastes way better',
         7: 'Skin is noticeably clearer',
@@ -256,7 +236,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 4. Gym (Mon/Wed/Fri) — 120 days, missed 2 full weeks (travel)
-    //    Used 1 freeze during travel, 0 remaining (used them up)
     _HabitSpec(
       name: 'Gym',
       emoji: '🏋️',
@@ -264,14 +243,14 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.weekdays,
       frequencyConfig: const WeekdaysConfig(weekdays: [1, 3, 5]),
       createdDaysAgo: 120,
+      description:
+          'Strength training session — push/pull/legs split. Log sets and reps in the notebook.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         120,
         {1, 3, 5},
         skipWeeksAgo: {8, 9},
       ),
-      streakFreezes: 0,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'New PR on bench — 100kg!',
         2: 'Leg day, absolutely destroyed',
@@ -281,7 +260,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 5. Meditate — 270-day habit, strong early streak, lapsed mid, back on track
-    //    1 freeze remaining, notes on sessions
     _HabitSpec(
       name: 'Meditate',
       emoji: '🧘',
@@ -289,13 +267,13 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 270,
+      description:
+          'Sit for at least 10 minutes of mindfulness meditation. Use Insight Timer or just breathe.',
       completedDaysAgo: {
         ..._daysAgoRange(270, 150), // first 120 days: perfect
         ..._daysAgoRange(90, 0), // last 90 days: back on track
         // gap: days 91–149 = lapsed period
       },
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: '20 min body scan, very calm',
         1: 'Tried box breathing today',
@@ -306,7 +284,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 6. Journal — 45-day perfect streak
-    //    Notes on entries, 1 freeze available
     _HabitSpec(
       name: 'Journal',
       emoji: '✍️',
@@ -314,9 +291,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 45,
+      description:
+          'Write at least one page — thoughts, wins, struggles, or gratitude. No filter, just write.',
       completedDaysAgo: _daysAgoRange(45, 0),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Wrote about the conversation with dad',
         2: 'Gratitude + 3 goals for the week',
@@ -328,7 +305,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 7. No Sugar — 60-day habit, alternating (hard habit, realistic)
-    //    Used 1 freeze on a birthday, 0 remaining
     _HabitSpec(
       name: 'No Sugar',
       emoji: '🍬',
@@ -336,22 +312,21 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 60,
+      description:
+          'Zero added sugar for the day — no sweets, soda, or sugary sauces. Fruit is fine.',
       completedDaysAgo: {
         for (var d = 0; d <= 60; d++)
           if (d % 3 != 0) d, // misses every 3rd day
       },
-      streakFreezes: 0,
-      frozenDatesAgo: {15}, // birthday party — used freeze
       notedDaysAgo: {
         0: 'Craving hit hard at 3pm, drank water instead',
         1: 'Swapped dessert for fruit',
         7: 'Cravings are getting weaker',
-        15: 'Birthday party — used freeze, no regrets',
+        15: 'Birthday party — had cake, back on track tomorrow',
       },
     ),
 
     // 8. Call Parents (Tue + Sat) — 180 days, very consistent
-    //    1 freeze remaining, notes on calls
     _HabitSpec(
       name: 'Call Parents',
       emoji: '📞',
@@ -359,14 +334,14 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.xPerWeek,
       frequencyConfig: const XPerWeekConfig(timesPerWeek: 2),
       createdDaysAgo: 180,
+      description:
+          'Call mom or dad — at least 15 minutes. Ask about their week, not just share updates.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         180,
         {2, 6},
         skipWeeksAgo: {12, 20},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Mom shared a recipe, wrote it down',
         3: 'Dad told stories about his childhood',
@@ -375,7 +350,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 9. Stretch (Mon/Wed/Fri/Sun) — 90 days, skipped 1 week
-    //    1 freeze remaining
     _HabitSpec(
       name: 'Stretch',
       emoji: '🤸',
@@ -383,14 +357,14 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.xPerWeek,
       frequencyConfig: const XPerWeekConfig(timesPerWeek: 4),
       createdDaysAgo: 90,
+      description:
+          'Full-body stretching routine — 15 minutes focusing on hips, hamstrings, and shoulders.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         90,
         {1, 3, 5, 7},
         skipWeeksAgo: {5},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Hip flexors finally loosening up',
         7: 'Can touch toes now!',
@@ -399,7 +373,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 10. Cold Shower — 30-day perfect streak (new habit, impressive)
-    //     1 freeze remaining, notes on experience
     _HabitSpec(
       name: 'Cold Shower',
       emoji: '❄️',
@@ -407,9 +380,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 30,
+      description:
+          'End every shower with at least 2 minutes of cold water. Build up duration over time.',
       completedDaysAgo: _daysAgoRange(30, 0),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: '3 minutes today, new record',
         1: 'Felt electric all morning',
@@ -420,7 +393,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 11. Learn Spanish — 150 days, human-ish consistency
-    //     1 freeze remaining, notes on progress
     _HabitSpec(
       name: 'Learn Spanish',
       emoji: '🦉',
@@ -428,13 +400,13 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 150,
+      description:
+          'Study Spanish for 20+ minutes — vocab, grammar, or conversation practice. Goal: B2 by year end.',
       completedDaysAgo: _humanDaily(
         150,
         missEvery: 8,
         extraMiss: {100, 99, 75, 50, 25},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Had a 5-min conversation with a native speaker!',
         3: 'Subjunctive mood is brutal',
@@ -444,7 +416,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 12. Sleep by 11 PM — 60 days, decent but not perfect
-    //     1 freeze remaining
     _HabitSpec(
       name: 'Sleep by 11 PM',
       emoji: '🌙',
@@ -452,13 +423,13 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 60,
+      description:
+          'Lights out by 11 PM — phone on charger outside the room, no screens for 30 min before.',
       completedDaysAgo: _humanDaily(
         60,
         missEvery: 7,
         extraMiss: {45, 30, 15, 7, 6},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'In bed by 10:45, read for 15 min',
         7: 'Woke up naturally before alarm',
@@ -467,7 +438,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 13. Gratitude List — 21-day perfect (new habit, building momentum)
-    //     1 freeze remaining, notes on gratitude entries
     _HabitSpec(
       name: 'Gratitude List',
       emoji: '🙏',
@@ -475,9 +445,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 21,
+      description:
+          'Write 3 specific things I am grateful for today. Be specific — not just "family" but why.',
       completedDaysAgo: _daysAgoRange(21, 0),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Grateful for: health, family, this app',
         3: 'Hard day but found 3 things anyway',
@@ -487,7 +457,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 14. Weekly Review (Sunday) — 52 weeks of data
-    //     1 freeze remaining, notes on reviews
     _HabitSpec(
       name: 'Weekly Review',
       emoji: '📊',
@@ -495,14 +464,14 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.weekdays,
       frequencyConfig: const WeekdaysConfig(weekdays: [7]),
       createdDaysAgo: 365,
+      description:
+          'Sunday review: what went well, what to improve, set 3 priorities for next week. 30 min.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         365,
         {7},
         skipWeeksAgo: {20, 35, 48},
       ),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Q3 goals: 2/3 on track, 1 needs attention',
         7: 'Best week in months — all habits green',
@@ -512,7 +481,6 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
     ),
 
     // 15. No Phone in Bed — 14-day streak (very new, building)
-    //     1 freeze remaining, notes on experience
     _HabitSpec(
       name: 'No Phone in Bed',
       emoji: '📵',
@@ -520,9 +488,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 14,
+      description:
+          'No phone in the bedroom after 10 PM. Charger stays in the hallway. Book or nothing.',
       completedDaysAgo: _daysAgoRange(14, 0),
-      streakFreezes: 1,
-      frozenDatesAgo: {},
       notedDaysAgo: {
         0: 'Read instead — fell asleep in 10 min',
         1: 'Hardest part is not checking notifications',
@@ -541,10 +509,10 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 70,
+      description:
+          'Complete one Duolingo lesson per day to build Spanish vocabulary.',
       completedDaysAgo: _daysAgoRange(70, 11, except: {45, 44, 20}),
       archivedDaysAgo: 10,
-      streakFreezes: 0,
-      frozenDatesAgo: {},
       notedDaysAgo: {11: 'Switching to a more serious app'},
     ),
 
@@ -556,10 +524,9 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 75,
+      description: '30-minute walk after dinner to wind down and get steps in.',
       completedDaysAgo: _daysAgoRange(75, 31, except: {60, 55, 50}),
       archivedDaysAgo: 30,
-      streakFreezes: 0,
-      frozenDatesAgo: {},
       notedDaysAgo: {31: 'Merging this into morning run'},
     ),
 
@@ -571,10 +538,10 @@ List<_HabitSpec> _buildSpecs(DateTime today) {
       frequencyType: FrequencyType.daily,
       frequencyConfig: const DailyConfig(),
       createdDaysAgo: 45,
+      description:
+          'Take daily vitamins with breakfast — D3, magnesium, and omega-3.',
       completedDaysAgo: _daysAgoRange(45, 16),
       archivedDaysAgo: 15,
-      streakFreezes: 0,
-      frozenDatesAgo: {},
       notedDaysAgo: {},
     ),
   ];

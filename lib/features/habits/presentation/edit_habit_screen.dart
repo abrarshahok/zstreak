@@ -7,10 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../analytics/analytics_service.dart';
 import '../../monetization/application/entitlement_providers.dart';
-import '../../monetization/presentation/paywall_screen.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
@@ -84,6 +85,7 @@ class EditHabitScreen extends ConsumerStatefulWidget {
 
 class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
   late final TextEditingController _nameController;
+  late final TextEditingController _descriptionController;
   late final TextEditingController _emojiSearchController;
   late String _emoji;
   late Color _color;
@@ -110,6 +112,9 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     // Priority: existing habit > template > defaults.
     _nameController = TextEditingController(
       text: habit?.name ?? tmpl?.name ?? '',
+    );
+    _descriptionController = TextEditingController(
+      text: habit?.description ?? tmpl?.description ?? '',
     );
     _emojiSearchController = TextEditingController();
     _emoji = habit?.emoji ?? tmpl?.emoji ?? _emojiChoices.first;
@@ -148,6 +153,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     _emojiSearchController.dispose();
     super.dispose();
   }
@@ -287,9 +293,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
       final isPremium = await ref.read(hasActiveEntitlementProvider.future);
       if (!isPremium && activeCount >= AppConfig.freeTierHabitLimit) {
         if (mounted) {
-          await Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
+          await navigateToPaywall(context, ref);
         }
         return;
       }
@@ -305,6 +309,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         existing != null && existing.frequencyType != _frequencyType;
     String habitId;
     if (existing == null) {
+      final description = _descriptionController.text.trim();
       final created = await repo.createHabit(
         name: name,
         emoji: _emoji,
@@ -312,6 +317,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         frequencyType: _frequencyType,
         frequencyConfig: _frequencyConfig,
         reminderTime: reminder,
+        description: description.isEmpty ? null : description,
       );
       habitId = created.id;
       final habitNumber = (await repo.watchActiveHabits().first).length;
@@ -319,6 +325,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
           .read(analyticsServiceProvider)
           .logHabitCreated(habitNumber: habitNumber);
     } else {
+      final description = _descriptionController.text.trim();
       await repo.updateHabit(
         id: existing.id,
         name: name,
@@ -327,6 +334,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         frequencyType: _frequencyType,
         frequencyConfig: _frequencyConfig,
         reminderTime: reminder,
+        description: description.isEmpty ? null : description,
       );
       habitId = existing.id;
     }
@@ -348,13 +356,17 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     }
     if (!mounted) return;
     if (widget.isFirstHabit) {
-      ScaffoldMessenger.of(
+      AppSnackBar.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(AppCopy.firstHabitCreated)));
+        AppCopy.firstHabitCreated,
+        type: SnackBarType.success,
+      );
     } else if (frequencyWillChange) {
-      ScaffoldMessenger.of(
+      AppSnackBar.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(AppCopy.frequencyChangedNotice)));
+        AppCopy.frequencyChangedNotice,
+        type: SnackBarType.info,
+      );
     }
     Navigator.of(context).pop();
   }
@@ -371,7 +383,10 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     await ref
         .read(notificationServiceProvider)
         .cancelReminder(widget.existing!.id);
-    if (mounted) Navigator.of(context).pop();
+    // popUntil home — the stack is Home → HabitDetail → EditHabit,
+    // so a single pop() would land on HabitDetail (which now shows a
+    // deleted habit). Pop all the way back to the root instead.
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _archive() async {
@@ -387,7 +402,9 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     await ref
         .read(notificationServiceProvider)
         .cancelReminder(widget.existing!.id);
-    if (mounted) Navigator.of(context).pop();
+    // Same as delete: pop all the way to home so the user doesn't land
+    // on a HabitDetail screen for a habit that's now archived.
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<bool?> _showConfirmDialog({
@@ -643,6 +660,39 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                 ),
             ],
           ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.1),
+
+          const SizedBox(height: 20),
+
+          // Description
+          EditSectionCard(
+            label: 'Description (optional)',
+            child: TextField(
+              controller: _descriptionController,
+              maxLength: 200,
+              maxLines: 8,
+              minLines: 5,
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              decoration: InputDecoration(
+                hintText:
+                    'What do you want to track? e.g. Run at least 3 km every morning…',
+                hintStyle: TextStyle(
+                  color: textMuted.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w400,
+                  fontSize: 13,
+                ),
+                filled: true,
+                fillColor: Colors.transparent,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                counterText: '',
+              ),
+            ),
+          ).animate().fadeIn(delay: 80.ms).slideY(begin: 0.1),
 
           const SizedBox(height: 12),
 

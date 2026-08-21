@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,8 +8,13 @@ import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../notifications/application/notification_providers.dart';
+
+import 'package:app_settings/app_settings.dart';
+
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/theme/theme_mode_providers.dart';
 import '../../../dev/seed_demo_data.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
@@ -16,7 +23,7 @@ import '../../auth/presentation/auth_gate.dart';
 import '../../data_export/data_export_providers.dart';
 import '../../guest/application/guest_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
-import '../../monetization/presentation/paywall_screen.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
 
 /// Settings screen — Gen-Z redesign with GenZBackground, glassmorphic
@@ -93,6 +100,15 @@ class SettingsScreen extends ConsumerWidget {
                         textPrimary: textPrimary,
                       ),
                     ],
+                  ),
+
+                  // ── Notifications ─────────────────────────────────────────────
+                  _SectionLabel('Notifications', accent: accent),
+                  _NotificationPermissionTile(
+                    isDark: isDark,
+                    accent: accent,
+                    textPrimary: textPrimary,
+                    textMuted: textMuted,
                   ),
 
                   // ── Data ──────────────────────────────────────────────────────
@@ -202,11 +218,7 @@ class SettingsScreen extends ConsumerWidget {
                         accent: accent,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const PaywallScreen(),
-                          ),
-                        ),
+                        onTap: () => navigateToPaywall(context, ref),
                       ),
                       _Divider(isDark: isDark),
                       _SettingsTile(
@@ -229,8 +241,8 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                   ),
 
-                  // ── Dev (signed-in only) ──────────────────────────────────────
-                  if (!isGuest) ...[
+                  // ── Dev (debug builds only) ───────────────────────────────
+                  if (kDebugMode && !isGuest) ...[
                     _SectionLabel('Dev', accent: accent),
                     _SettingsCard(
                       isDark: isDark,
@@ -281,7 +293,7 @@ class SettingsScreen extends ConsumerWidget {
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () =>
-                            launchUrl(Uri.parse('mailto:support@zstreak.app')),
+                            launchUrl(Uri.parse('mailto:zstreak26@gmail.com')),
                       ),
                     ],
                   ),
@@ -330,19 +342,41 @@ class SettingsScreen extends ConsumerWidget {
   Future<void> _confirmGuestLogOut(BuildContext context, WidgetRef ref) async {
     final confirmed = await _showFlatConfirmDialog(
       context: context,
-      title: 'Log out?',
+      title: 'You\'re in Guest Mode',
       body:
-          'You\'ll return to the start screen. Your local data stays on this device — link an account first if you want to keep it.',
-      confirmLabel: 'Log out',
+          'Logging out will permanently delete all your habits, streaks, and progress stored on this device.\n\nThis cannot be undone. Link an account first if you want to keep your progress.',
+      confirmLabel: 'Delete & log out',
       isDanger: true,
     );
     if (confirmed != true) return;
-    await ref.read(authRepositoryProvider).signOut();
+
+    final deletionService = ref.read(accountDeletionServiceProvider);
+    final guestRepo = ref.read(guestMetaRepositoryProvider);
+
+    // ── Step 1: wipe all local Drift data (habits, check-ins, guest_meta) ───
+    // Uses wipeAllLocalData() — full delete with no re-insert, since the
+    // anonymous session is being destroyed and we don't need a fresh row.
+    await guestRepo.wipeAllLocalData();
+
+    // ── Step 2: clear profile data from SharedPreferences ────────────────────
+    await ref.read(userProfileProvider.notifier).reset();
+
+    // ── Step 3: navigate to AuthGate — tears down all Firestore listeners ────
+    // Guest (anonymous) users are blocked from Firestore by security rules
+    // (sign_in_provider != 'anonymous'), so there is no remote data to delete.
     if (!context.mounted) return;
-    // Clear the entire stack and go back to AuthGate (which shows onboarding).
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AuthGate()),
       (_) => false,
+    );
+
+    // ── Step 4: delete the Firebase Auth record (fire-and-forget) ────────────
+    // Done AFTER navigation so no active listeners receive PERMISSION_DENIED
+    // when the token is invalidated by user.delete().
+    deletionService.deleteGuestAuthRecord().catchError(
+      (e) => debugPrint(
+        '[GuestLogOut] deleteGuestAuthRecord error (non-fatal): $e',
+      ),
     );
   }
 
@@ -351,9 +385,7 @@ class SettingsScreen extends ConsumerWidget {
     if (uid == null) return;
     await seedDemoData(FirebaseFirestore.instance, uid);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Demo data seeded.')));
+    AppSnackBar.show(context, 'Demo data seeded.', type: SnackBarType.success);
   }
 
   Future<void> _confirmClearGuestData(
@@ -388,7 +420,40 @@ class SettingsScreen extends ConsumerWidget {
       isDanger: true,
     );
     if (confirmed != true) return;
-    await ref.read(accountDeletionServiceProvider).deleteAccount();
+
+    try {
+      await ref.read(accountDeletionServiceProvider).deleteAccount();
+    } on FirebaseAuthException catch (e) {
+      if (!context.mounted) return;
+      if (e.code == 'requires-recent-login') {
+        // Firebase requires a fresh sign-in before deleting the Auth record.
+        // Sign the user out so AuthGate sends them back to the sign-in screen,
+        // where they can re-authenticate and then retry deletion.
+        AppSnackBar.show(
+          context,
+          'For security, please sign in again and then delete your account.',
+          type: SnackBarType.warning,
+          duration: const Duration(seconds: 4),
+        );
+        await ref.read(authRepositoryProvider).signOut();
+        return;
+      }
+      AppSnackBar.show(
+        context,
+        'Could not delete account: ${e.message}',
+        type: SnackBarType.error,
+      );
+      return;
+    } catch (e) {
+      if (!context.mounted) return;
+      AppSnackBar.show(
+        context,
+        'Could not delete account: $e',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -504,10 +569,10 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(revenueCatServiceProvider).restorePurchases();
     final isPremium = await ref.read(hasActiveEntitlementProvider.future);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(isPremium ? 'Restored.' : 'No previous purchase found.'),
-      ),
+    AppSnackBar.show(
+      context,
+      isPremium ? 'Restored.' : 'No previous purchase found.',
+      type: isPremium ? SnackBarType.success : SnackBarType.warning,
     );
   }
 
@@ -515,9 +580,7 @@ class SettingsScreen extends ConsumerWidget {
     final isPremium = await ref.read(hasActiveEntitlementProvider.future);
     if (!context.mounted) return;
     if (!isPremium) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
+      await navigateToPaywall(context, ref);
       return;
     }
     await HomeWidget.requestPinWidget(
@@ -752,6 +815,105 @@ class _ThemeModeTile extends ConsumerWidget {
   }
 }
 
+// ── Notification permission tile ──────────────────────────────────────────────
+
+class _NotificationPermissionTile extends ConsumerStatefulWidget {
+  const _NotificationPermissionTile({
+    required this.isDark,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+  });
+
+  final bool isDark;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+
+  @override
+  ConsumerState<_NotificationPermissionTile> createState() =>
+      _NotificationPermissionTileState();
+}
+
+class _NotificationPermissionTileState
+    extends ConsumerState<_NotificationPermissionTile>
+    with WidgetsBindingObserver {
+  bool _granted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Re-check when the user returns from system Settings.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkPermission();
+  }
+
+  Future<void> _checkPermission() async {
+    final svc = ref.read(notificationServiceProvider);
+    final ok = await svc.areNotificationsEnabled();
+    if (mounted) setState(() => _granted = ok);
+  }
+
+  Future<void> _handleTap() async {
+    final svc = ref.read(notificationServiceProvider);
+    if (_granted) {
+      // Already enabled — open notification settings so user can manage
+      // channels (e.g. mute streak-at-risk but keep daily reminders).
+      await AppSettings.openAppSettings(type: AppSettingsType.notification);
+      return;
+    }
+    // Not yet granted: try the system permission dialog first.
+    final result = await svc.requestNotificationPermission();
+    if (mounted) setState(() => _granted = result);
+    if (!result && mounted) {
+      // Permanently denied — system dialog won't show again.
+      // Send the user directly to the app's notification settings page.
+      await AppSettings.openAppSettings(type: AppSettingsType.notification);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final surfaceColor = widget.isDark
+        ? AppColors.surface
+        : AppColors.surfaceLight;
+    final borderColor = widget.isDark
+        ? AppColors.border
+        : AppColors.borderLight;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: _SettingsTile(
+        icon: _granted
+            ? Icons.notifications_active_outlined
+            : Icons.notifications_off_outlined,
+        label: 'Notifications',
+        subtitle: _granted ? 'Enabled — tap to manage' : 'Tap to enable',
+        accent: _granted ? widget.accent : AppColors.danger,
+        textPrimary: widget.textPrimary,
+        textMuted: widget.textMuted,
+        onTap: _handleTap,
+      ),
+    );
+  }
+}
+
 // ── App version tile ──────────────────────────────────────────────────────────
 
 class _AppVersionTile extends StatelessWidget {
@@ -803,6 +965,12 @@ class _ProfileCard extends ConsumerStatefulWidget {
 }
 
 class _ProfileCardState extends ConsumerState<_ProfileCard> {
+  /// Returns the current user's uid when signed in with Google, null for guests.
+  String? get _uid {
+    final user = ref.read(authStateProvider).valueOrNull;
+    return (user != null && user.isAnonymous == false) ? user.uid : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(userProfileProvider);
@@ -832,7 +1000,8 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
             icon: Icons.person_outline_rounded,
             initialValue: profile.name,
             capitalization: TextCapitalization.words,
-            onSave: (v) => ref.read(userProfileProvider.notifier).setName(v),
+            onSave: (v) =>
+                ref.read(userProfileProvider.notifier).setName(v, uid: _uid),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
@@ -934,8 +1103,9 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                       'Prefer not to say',
                     ],
                     current: profile.gender,
-                    onSave: (v) =>
-                        ref.read(userProfileProvider.notifier).setGender(v),
+                    onSave: (v) => ref
+                        .read(userProfileProvider.notifier)
+                        .setGender(v, uid: _uid),
                   ),
                 ),
               ),
@@ -961,7 +1131,8 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
               'Physical fitness',
             ],
             current: profile.goals,
-            onSave: (v) => ref.read(userProfileProvider.notifier).setGoals(v),
+            onSave: (v) =>
+                ref.read(userProfileProvider.notifier).setGoals(v, uid: _uid),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -1047,167 +1218,25 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
     int maxLength = 40,
     bool isRequired = true,
   }) async {
-    final ctrl = TextEditingController(text: initialValue);
+    // Use a dedicated StatefulWidget so the TextEditingController has a proper
+    // lifecycle tied to the sheet's widget tree — avoids "used after disposed"
+    // errors that occur when the controller is created outside the builder and
+    // disposed after showModalBottomSheet returns (e.g. on hot restart).
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
-        final textPrimary = isDark
-            ? AppColors.textPrimary
-            : AppColors.textPrimaryLight;
-        final textMuted = isDark
-            ? AppColors.textMuted
-            : AppColors.textMutedLight;
-        final handleColor = isDark
-            ? Colors.white.withValues(alpha: 0.2)
-            : Colors.black.withValues(alpha: 0.12);
-        final borderColor = isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.black.withValues(alpha: 0.06);
-        final fieldBg = isDark
-            ? AppColors.background.withValues(alpha: 0.6)
-            : Colors.black.withValues(alpha: 0.04);
-        final fieldBorder = isDark
-            ? Colors.white.withValues(alpha: 0.07)
-            : Colors.black.withValues(alpha: 0.07);
-        String? fieldError;
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) => Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            ),
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: borderColor),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Drag handle
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(2),
-                        color: handleColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 17,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: fieldError != null
-                          ? AppColors.danger.withValues(alpha: 0.04)
-                          : fieldBg,
-                      border: Border.all(
-                        color: fieldError != null
-                            ? AppColors.danger
-                            : fieldBorder,
-                        width: fieldError != null ? 1.5 : 1,
-                      ),
-                    ),
-                    child: TextField(
-                      controller: ctrl,
-                      autofocus: true,
-                      textCapitalization: capitalization,
-                      maxLength: maxLength,
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      onChanged: (_) {
-                        if (fieldError != null) {
-                          setSheetState(() => fieldError = null);
-                        }
-                      },
-                      decoration: InputDecoration(
-                        prefixIcon: Icon(
-                          icon,
-                          color: fieldError != null
-                              ? AppColors.danger
-                              : textMuted,
-                          size: 20,
-                        ),
-                        border: InputBorder.none,
-                        counterText: '',
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (fieldError != null) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.error_outline_rounded,
-                          size: 13,
-                          color: AppColors.danger,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          fieldError!,
-                          style: const TextStyle(
-                            color: AppColors.danger,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  _SaveButton(
-                    onTap: () async {
-                      final value = ctrl.text.trim();
-                      if (isRequired && value.isEmpty) {
-                        setSheetState(
-                          () => fieldError = 'This field is required',
-                        );
-                        return;
-                      }
-                      if (value.length > maxLength) {
-                        setSheetState(
-                          () => fieldError =
-                              'Must be $maxLength characters or less',
-                        );
-                        return;
-                      }
-                      await onSave(value);
-                      if (ctx.mounted) Navigator.of(ctx).pop();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      elevation: 0,
+      builder: (ctx) => _TextFieldSheet(
+        title: title,
+        icon: icon,
+        initialValue: initialValue,
+        capitalization: capitalization,
+        maxLength: maxLength,
+        isRequired: isRequired,
+        onSave: onSave,
+      ),
     );
-    ctrl.dispose();
   }
 
   // ── Age wheel picker ────────────────────────────────────────────────────────
@@ -1225,12 +1254,15 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) => _AgePickerSheet(
         initialAge: initialAge,
         minAge: minAge,
         maxAge: maxAge,
         onSave: (age) async {
-          await ref.read(userProfileProvider.notifier).setAge(age.toString());
+          await ref
+              .read(userProfileProvider.notifier)
+              .setAge(age.toString(), uid: _uid);
         },
       ),
     );
@@ -1248,6 +1280,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
@@ -1390,6 +1423,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
@@ -1503,6 +1537,208 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Text field sheet (StatefulWidget — controller lifecycle tied to widget) ───
+
+/// Dedicated [StatefulWidget] for the name-edit bottom sheet.
+///
+/// Keeping the [TextEditingController] inside the widget's [State] ensures it
+/// is created when the sheet mounts and disposed when it unmounts — preventing
+/// the "TextEditingController used after being disposed" error that occurs when
+/// the controller is created outside [showModalBottomSheet]'s builder and
+/// disposed after the future resolves (e.g. on hot restart).
+class _TextFieldSheet extends StatefulWidget {
+  const _TextFieldSheet({
+    required this.title,
+    required this.icon,
+    required this.initialValue,
+    required this.onSave,
+    this.capitalization = TextCapitalization.none,
+    this.maxLength = 40,
+    this.isRequired = true,
+  });
+
+  final String title;
+  final IconData icon;
+  final String initialValue;
+  final Future<void> Function(String) onSave;
+  final TextCapitalization capitalization;
+  final int maxLength;
+  final bool isRequired;
+
+  @override
+  State<_TextFieldSheet> createState() => _TextFieldSheetState();
+}
+
+class _TextFieldSheetState extends State<_TextFieldSheet> {
+  late final TextEditingController _ctrl;
+  String? _fieldError;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final handleColor = isDark
+        ? Colors.white.withValues(alpha: 0.2)
+        : Colors.black.withValues(alpha: 0.12);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final fieldBg = isDark
+        ? AppColors.background.withValues(alpha: 0.6)
+        : Colors.black.withValues(alpha: 0.04);
+    final fieldBorder = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.07);
+
+    return Padding(
+      // Shift the sheet up when the keyboard appears.
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        // Prevents RenderFlex overflow when content + keyboard exceed viewport.
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: borderColor),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    color: handleColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                widget.title,
+                style: TextStyle(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 16),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: _fieldError != null
+                      ? AppColors.danger.withValues(alpha: 0.04)
+                      : fieldBg,
+                  border: Border.all(
+                    color: _fieldError != null ? AppColors.danger : fieldBorder,
+                    width: _fieldError != null ? 1.5 : 1,
+                  ),
+                ),
+                child: TextField(
+                  controller: _ctrl,
+                  autofocus: true,
+                  textCapitalization: widget.capitalization,
+                  maxLength: widget.maxLength,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  onChanged: (_) {
+                    if (_fieldError != null) {
+                      setState(() => _fieldError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(
+                      widget.icon,
+                      color: _fieldError != null ? AppColors.danger : textMuted,
+                      size: 20,
+                    ),
+                    border: InputBorder.none,
+                    counterText: '',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ),
+              if (_fieldError != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 13,
+                      color: AppColors.danger,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _fieldError!,
+                      style: const TextStyle(
+                        color: AppColors.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
+              _SaveButton(
+                onTap: () async {
+                  final value = _ctrl.text.trim();
+                  if (widget.isRequired && value.isEmpty) {
+                    setState(() => _fieldError = 'This field is required');
+                    return;
+                  }
+                  if (value.length > widget.maxLength) {
+                    setState(
+                      () => _fieldError =
+                          'Must be ${widget.maxLength} characters or less',
+                    );
+                    return;
+                  }
+                  // Capture navigator before the async gap to satisfy
+                  // use_build_context_synchronously lint.
+                  final nav = Navigator.of(context);
+                  await widget.onSave(value);
+                  if (mounted) nav.pop();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1658,7 +1894,9 @@ class _AgePickerSheetState extends State<_AgePickerSheet> {
                     },
                   ),
                 ),
-                // Top fade
+                // Top fade — use surface.withValues(alpha:0) instead of
+                // Colors.transparent to avoid Flutter's "fade through black"
+                // gradient interpolation bug.
                 Positioned(
                   top: 0,
                   left: 0,
@@ -1670,10 +1908,7 @@ class _AgePickerSheetState extends State<_AgePickerSheet> {
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [
-                            surface.withValues(alpha: 0.95),
-                            Colors.transparent,
-                          ],
+                          colors: [surface, surface.withValues(alpha: 0)],
                         ),
                       ),
                     ),
@@ -1691,10 +1926,7 @@ class _AgePickerSheetState extends State<_AgePickerSheet> {
                         gradient: LinearGradient(
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
-                          colors: [
-                            surface.withValues(alpha: 0.95),
-                            Colors.transparent,
-                          ],
+                          colors: [surface, surface.withValues(alpha: 0)],
                         ),
                       ),
                     ),
@@ -1719,9 +1951,30 @@ class _AgePickerSheetState extends State<_AgePickerSheet> {
 
 // ── Reusable save button ──────────────────────────────────────────────────────
 
-class _SaveButton extends StatelessWidget {
+/// Async-safe save button. Accepts a [Future<void> Function()] so errors are
+/// properly caught and the button shows a loading indicator while saving.
+class _SaveButton extends StatefulWidget {
   const _SaveButton({required this.onTap});
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
+
+  @override
+  State<_SaveButton> createState() => _SaveButtonState();
+}
+
+class _SaveButtonState extends State<_SaveButton> {
+  bool _loading = false;
+
+  Future<void> _handleTap() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await widget.onTap();
+    } catch (e) {
+      debugPrint('[SaveButton] onTap error: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1729,7 +1982,7 @@ class _SaveButton extends StatelessWidget {
     final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
     final fgColor = isDark ? Colors.black : Colors.white;
     return GestureDetector(
-      onTap: onTap,
+      onTap: _loading ? null : _handleTap,
       child: Container(
         height: 52,
         decoration: BoxDecoration(
@@ -1737,14 +1990,23 @@ class _SaveButton extends StatelessWidget {
           color: accent,
         ),
         child: Center(
-          child: Text(
-            'Save',
-            style: TextStyle(
-              color: fgColor,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-            ),
-          ),
+          child: _loading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(fgColor),
+                  ),
+                )
+              : Text(
+                  'Save',
+                  style: TextStyle(
+                    color: fgColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
         ),
       ),
     );

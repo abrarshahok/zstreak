@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/prefs/shared_preferences_provider.dart';
+import 'user_profile_provider.dart';
 
 const kOnboardingCompleteKey = 'onboarding_complete';
 
@@ -13,9 +14,20 @@ final onboardingCompleteProvider = StateProvider<bool>(
 );
 
 Future<void> markOnboardingComplete(WidgetRef ref) async {
-  await ref.read(sharedPreferencesProvider).setBool(kOnboardingCompleteKey, true);
+  await ref
+      .read(sharedPreferencesProvider)
+      .setBool(kOnboardingCompleteKey, true);
   ref.read(onboardingCompleteProvider.notifier).state = true;
 }
 
 bool readOnboardingCompleteFromPrefs(SharedPreferences prefs) =>
     prefs.getBool(kOnboardingCompleteKey) ?? false;
+
+/// True when the user has completed the profile questionnaire (name is set).
+/// Used by [AuthGate] to detect signed-in users who skipped the questions
+/// (e.g. tapped "Sign in" on the onboarding screen directly) and route them
+/// back through [UserProfileQuestionsScreen].
+final profileCompleteProvider = Provider<bool>((ref) {
+  final profile = ref.watch(userProfileProvider);
+  return profile.hasName;
+});

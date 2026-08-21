@@ -57,10 +57,6 @@ class StreakCalculator {
     required DateTime createdAtLocal,
     required Set<String> completedDates,
     required DateTime today,
-
-    /// Feature 1 – Streak Freeze: dates in this set are treated as
-    /// completed for streak purposes even if not in [completedDates].
-    Set<String> frozenDates = const {},
   }) {
     switch (frequencyType) {
       case FrequencyType.daily:
@@ -68,7 +64,6 @@ class StreakCalculator {
           isScheduled: (_) => true,
           createdAtLocal: createdAtLocal,
           completedDates: completedDates,
-          frozenDates: frozenDates,
           today: today,
         );
       case FrequencyType.weekdays:
@@ -77,7 +72,6 @@ class StreakCalculator {
           isScheduled: (day) => weekdays.contains(day.weekday),
           createdAtLocal: createdAtLocal,
           completedDates: completedDates,
-          frozenDates: frozenDates,
           today: today,
         );
       case FrequencyType.xPerWeek:
@@ -85,7 +79,6 @@ class StreakCalculator {
           config: frequencyConfig as XPerWeekConfig,
           createdAtLocal: createdAtLocal,
           completedDates: completedDates,
-          frozenDates: frozenDates,
           today: today,
         );
     }
@@ -93,14 +86,10 @@ class StreakCalculator {
 
   /// Shared engine for daily and weekday-scheduled habits: walk forward
   /// day by day, only scheduled days can extend or break the run.
-  ///
-  /// A day in [frozenDates] that would otherwise be a miss is treated as
-  /// completed for streak continuity (Feature 1 – Streak Freeze).
   static StreakResult _computeDaily({
     required bool Function(DateTime day) isScheduled,
     required DateTime createdAtLocal,
     required Set<String> completedDates,
-    required Set<String> frozenDates,
     required DateTime today,
   }) {
     final start = DateTime(
@@ -127,13 +116,11 @@ class StreakCalculator {
 
       final dateStr = localDateString(day);
       final isCompleted = completedDates.contains(dateStr);
-      final isFrozen = frozenDates.contains(dateStr);
       final isToday = day == end;
 
-      if (isCompleted || isFrozen) {
+      if (isCompleted) {
         streak += 1;
         if (streak > longest) longest = streak;
-        // Frozen days render as completed in the grid — they kept the streak.
         days.add(
           HabitDayStatus(
             date: day,
@@ -157,13 +144,10 @@ class StreakCalculator {
     );
   }
 
-  /// For xPerWeek habits, frozen dates count toward the weekly target —
-  /// a frozen day is treated as a completed check-in for that week.
   static StreakResult _computeXPerWeek({
     required XPerWeekConfig config,
     required DateTime createdAtLocal,
     required Set<String> completedDates,
-    required Set<String> frozenDates,
     required DateTime today,
   }) {
     final end = DateTime(today.year, today.month, today.day);
@@ -191,8 +175,7 @@ class StreakCalculator {
         day = day.add(const Duration(days: 1))
       ) {
         final dateStr = localDateString(day);
-        final completed =
-            completedDates.contains(dateStr) || frozenDates.contains(dateStr);
+        final completed = completedDates.contains(dateStr);
         if (completed) count += 1;
         days.add(
           HabitDayStatus(

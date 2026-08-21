@@ -6,7 +6,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../monetization/application/entitlement_providers.dart';
-import '../../monetization/presentation/paywall_screen.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
@@ -143,7 +143,7 @@ class _EmptyState extends StatelessWidget {
 
 // ── Archived habit tile ───────────────────────────────────────────────────────
 
-class _ArchivedHabitTile extends ConsumerWidget {
+class _ArchivedHabitTile extends ConsumerStatefulWidget {
   const _ArchivedHabitTile({
     required this.habit,
     required this.isDark,
@@ -158,28 +158,41 @@ class _ArchivedHabitTile extends ConsumerWidget {
   final Color textMuted;
   final Color accent;
 
-  Future<void> _reactivate(BuildContext context, WidgetRef ref) async {
+  @override
+  ConsumerState<_ArchivedHabitTile> createState() => _ArchivedHabitTileState();
+}
+
+class _ArchivedHabitTileState extends ConsumerState<_ArchivedHabitTile> {
+  Future<void> _reactivate() async {
+    final habit = widget.habit;
+
     final activeCount =
         (await ref.read(habitRepositoryProvider).watchActiveHabits().first)
             .length;
+    if (!mounted) return;
+
     final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+    if (!mounted) return;
+
     if (!isPremium && activeCount >= AppConfig.freeTierHabitLimit) {
-      if (context.mounted) {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const PaywallScreen()));
-      }
+      await navigateToPaywall(context, ref);
       return;
     }
 
+    if (!mounted) return;
     await ref.read(habitRepositoryProvider).unarchiveHabit(habit.id);
+
     final reminder = habit.reminderTime;
     if (reminder == null) return;
     final parts = reminder.split(':');
+
+    if (!mounted) return;
     // Fetch the latest habit after unarchiving to get the current streak.
     final latestHabit = await ref
         .read(habitRepositoryProvider)
         .getHabitById(habit.id);
+
+    if (!mounted) return;
     await ref
         .read(notificationServiceProvider)
         .scheduleDailyReminder(
@@ -195,10 +208,15 @@ class _ArchivedHabitTile extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final habit = widget.habit;
     final habitColor = colorFromHex(habit.colorHex);
-    final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
-    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
+    final surfaceColor = widget.isDark
+        ? AppColors.surface
+        : AppColors.surfaceLight;
+    final borderColor = widget.isDark
+        ? AppColors.border
+        : AppColors.borderLight;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -237,7 +255,7 @@ class _ArchivedHabitTile extends ConsumerWidget {
                   Text(
                     habit.name,
                     style: TextStyle(
-                      color: textPrimary,
+                      color: widget.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                     ),
@@ -252,7 +270,7 @@ class _ArchivedHabitTile extends ConsumerWidget {
                       Text(
                         'Best streak: ${habit.longestStreak}',
                         style: TextStyle(
-                          color: textMuted,
+                          color: widget.textMuted,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
@@ -266,7 +284,7 @@ class _ArchivedHabitTile extends ConsumerWidget {
             // ── Reactivate button ─────────────────────────────────────────
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () => _reactivate(context, ref),
+              onTap: _reactivate,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,

@@ -18,7 +18,8 @@ class AppCopy {
   // Onboarding / benefits (Section 3, screen 1) — sell the outcome, not
   // a feature list. Refresh the slang lines every 6-12 months.
   static const String onboardingHeadline1 = 'See your consistency at a glance.';
-  static const String onboardingHeadline2 = 'Build a streak that actually sticks.';
+  static const String onboardingHeadline2 =
+      'Build a streak that actually sticks.';
   static const String onboardingHeadline3 =
       "No cap, this is the simplest habit tracker you'll use.";
   static const String onboardingSignUp = 'Sign up';
@@ -32,7 +33,8 @@ class AppCopy {
 
   // First habit creation (Section 3, screen 4)
   static const String firstHabitHeadline = 'Create your first habit.';
-  static const String firstHabitCreated = "First one's in. Let's build this streak.";
+  static const String firstHabitCreated =
+      "First one's in. Let's build this streak.";
 
   // Guest mode (Section 3a's 24-hour window)
   static const String guestModeLabel = "You're in guest mode.";
@@ -46,7 +48,6 @@ class AppCopy {
   static const String guestPayingReminderBanner =
       'Link your account to protect your subscription';
   static const String linkWithGoogle = 'Link with Google';
-  static const String linkWithEmail = 'Link with email';
   static const String exportMyData = 'Export my data';
   static const String linkAccount = 'Link an account';
 

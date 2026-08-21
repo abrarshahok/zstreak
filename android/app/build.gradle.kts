@@ -20,8 +20,9 @@ android {
 
     defaultConfig {
         applicationId = "com.zstreak.app"
-        // Firebase Auth requires API 23+.
-        minSdk = flutter.minSdkVersion
+        // purchases_flutter (RevenueCat) requires minSdk 24.
+        // Firebase Auth requires 23+, so 24 satisfies both.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

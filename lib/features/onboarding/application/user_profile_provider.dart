@@ -1,6 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/firebase/firestore_providers.dart';
 import '../../../core/prefs/shared_preferences_provider.dart';
 
 // ─── Keys ─────────────────────────────────────────────────────────────────────
@@ -56,6 +59,37 @@ class UserProfile {
   /// Legacy single-goal accessor — returns first goal or empty string.
   /// Used by places that still read a single value.
   String get goal => goals.isEmpty ? '' : goals.first;
+
+  Map<String, dynamic> toFirestore() => {
+    'name': name,
+    'age': age,
+    'gender': gender,
+    'goals': goals,
+    'updatedAt': FieldValue.serverTimestamp(),
+  };
+
+  factory UserProfile.fromFirestore(Map<String, dynamic> data) {
+    final rawGoals = data['goals'];
+    List<String> goals;
+    if (rawGoals is List) {
+      goals = rawGoals.map((e) => e.toString()).toList();
+    } else if (rawGoals is String && rawGoals.isNotEmpty) {
+      // Legacy comma-separated format
+      goals = rawGoals
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } else {
+      goals = [];
+    }
+    return UserProfile(
+      name: (data['name'] as String?) ?? '',
+      age: (data['age'] as String?) ?? '',
+      gender: (data['gender'] as String?) ?? '',
+      goals: List.unmodifiable(goals),
+    );
+  }
 }
 
 // ─── Notifier ─────────────────────────────────────────────────────────────────
@@ -70,38 +104,81 @@ class UserProfileNotifier extends Notifier<UserProfile> {
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
-  Future<void> setName(String v) async {
+  /// Firestore document reference for the given uid.
+  DocumentReference<Map<String, dynamic>> _doc(String uid) => ref
+      .read(firestoreProvider)
+      .collection('users')
+      .doc(uid)
+      .collection('profile')
+      .doc('data');
+
+  /// Write profile to Firestore for [uid]. Called by [app.dart] after sign-in.
+  Future<void> pushToFirestore(String uid) async {
+    try {
+      await _doc(uid).set(state.toFirestore(), SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[UserProfile] pushToFirestore failed: $e');
+    }
+  }
+
+  /// Pull profile from Firestore for [uid] and hydrate local state + prefs.
+  /// Called by [app.dart] when a non-anonymous user signs in.
+  Future<void> syncFromFirestore(String uid) async {
+    try {
+      final snap = await _doc(uid).get();
+      if (!snap.exists || snap.data() == null) {
+        // No remote profile yet — push local data up so it's stored.
+        await pushToFirestore(uid);
+        return;
+      }
+      final remote = UserProfile.fromFirestore(snap.data()!);
+      // Hydrate SharedPreferences so the profile survives app restarts.
+      await _prefs.setString(_kName, remote.name);
+      await _prefs.setString(_kAge, remote.age);
+      await _prefs.setString(_kGender, remote.gender);
+      await _prefs.setString(_kGoals, remote.goals.join(','));
+      state = remote;
+    } catch (e) {
+      debugPrint('[UserProfile] syncFromFirestore failed: $e');
+    }
+  }
+
+  Future<void> setName(String v, {String? uid}) async {
     final trimmed = v.trim();
     await _prefs.setString(_kName, trimmed);
     state = state.copyWith(name: trimmed);
+    if (uid != null) unawaited(pushToFirestore(uid));
   }
 
-  Future<void> setAge(String v) async {
+  Future<void> setAge(String v, {String? uid}) async {
     final trimmed = v.trim();
     await _prefs.setString(_kAge, trimmed);
     state = state.copyWith(age: trimmed);
+    if (uid != null) unawaited(pushToFirestore(uid));
   }
 
-  Future<void> setGender(String v) async {
+  Future<void> setGender(String v, {String? uid}) async {
     await _prefs.setString(_kGender, v);
     state = state.copyWith(gender: v);
+    if (uid != null) unawaited(pushToFirestore(uid));
   }
 
   /// Replace the full goals list.
-  Future<void> setGoals(List<String> v) async {
+  Future<void> setGoals(List<String> v, {String? uid}) async {
     await _prefs.setString(_kGoals, v.join(','));
     state = state.copyWith(goals: List.unmodifiable(v));
+    if (uid != null) unawaited(pushToFirestore(uid));
   }
 
   /// Toggle a single goal in/out of the list.
-  Future<void> toggleGoal(String goal) async {
+  Future<void> toggleGoal(String goal, {String? uid}) async {
     final current = List<String>.from(state.goals);
     if (current.contains(goal)) {
       current.remove(goal);
     } else {
       current.add(goal);
     }
-    await setGoals(current);
+    await setGoals(current, uid: uid);
   }
 
   Future<void> reset() async {
@@ -141,3 +218,11 @@ UserProfile readUserProfileFromPrefs(SharedPreferences prefs) =>
 final userProfileProvider = NotifierProvider<UserProfileNotifier, UserProfile>(
   UserProfileNotifier.new,
 );
+
+// ─── unawaited helper ─────────────────────────────────────────────────────────
+
+void unawaited(Future<void> future) {
+  future.catchError(
+    (e) => debugPrint('[UserProfile] background write failed: $e'),
+  );
+}

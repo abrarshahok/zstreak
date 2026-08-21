@@ -63,6 +63,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     final habit = await _inner.createHabit(
       name: name,
@@ -71,6 +72,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       frequencyType: frequencyType,
       frequencyConfig: frequencyConfig,
       reminderTime: reminderTime,
+      description: description,
     );
     await _syncAll();
     return habit;
@@ -101,6 +103,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
+    String? description,
   }) async {
     await _inner.updateHabit(
       id: id,
@@ -110,6 +113,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       frequencyType: frequencyType,
       frequencyConfig: frequencyConfig,
       reminderTime: reminderTime,
+      description: description,
     );
     await _syncAll();
   }
@@ -129,15 +133,6 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   @override
   Future<void> deleteHabit(String id) async {
     await _inner.deleteHabit(id);
-    await _syncAll();
-  }
-
-  @override
-  Future<void> useFreeze({
-    required String habitId,
-    required String date,
-  }) async {
-    await _inner.useFreeze(habitId: habitId, date: date);
     await _syncAll();
   }
 

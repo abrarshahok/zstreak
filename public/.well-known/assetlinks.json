@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zstreak.app",
+      "sha256_cert_fingerprints": [
+        "4D:2F:A7:BD:31:E9:31:D5:E7:5A:6D:E5:FE:AB:91:8D:B8:E8:E9:03:64:B1:28:E3:F7:00:CE:AF:FA:6F:9D:70"
+      ]
+    }
+  }
+]

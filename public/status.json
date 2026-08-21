@@ -1,0 +1,8 @@
+{
+  "maintenanceMode": false,
+  "title": "We'll Be Back Soon",
+  "message": "We're currently experiencing a temporary service interruption.\nOur team is working to restore everything as quickly as possible.\n\nPlease try again in a little while.",
+  "retryEnabled": true,
+  "estimatedReturnTime": null,
+  "minAppVersion": null
+}
