@@ -1,124 +1,576 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ZStreak — Privacy Policy</title>
+    <meta
+      name="description"
+      content="ZStreak Privacy Policy — what data we collect, why, and how to delete it."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --bg: #0e0e0e;
+        --surface: #1a1a1a;
+        --surface-el: #242424;
+        --border: #2a2a2a;
+        --accent: #b57bff;
+        --accent-dim: rgba(181, 123, 255, 0.12);
+        --accent-border: rgba(181, 123, 255, 0.25);
+        --text: #f2f2f2;
+        --muted: #888888;
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not(.dark) {
+          --bg: #f7f7f7;
+          --surface: #ffffff;
+          --surface-el: #f0f0f0;
+          --border: #e5e5e5;
+          --accent: #7c3aed;
+          --accent-dim: rgba(124, 58, 237, 0.08);
+          --accent-border: rgba(124, 58, 237, 0.2);
+          --text: #111111;
+          --muted: #888888;
+        }
+      }
+      html.light {
+        --bg: #f7f7f7;
+        --surface: #ffffff;
+        --surface-el: #f0f0f0;
+        --border: #e5e5e5;
+        --accent: #7c3aed;
+        --accent-dim: rgba(124, 58, 237, 0.08);
+        --accent-border: rgba(124, 58, 237, 0.2);
+        --text: #111111;
+        --muted: #888888;
+      }
+      html.dark {
+        --bg: #0e0e0e;
+        --surface: #1a1a1a;
+        --surface-el: #242424;
+        --border: #2a2a2a;
+        --accent: #b57bff;
+        --accent-dim: rgba(181, 123, 255, 0.12);
+        --accent-border: rgba(181, 123, 255, 0.25);
+        --text: #f2f2f2;
+        --muted: #888888;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         font-family:
+          "Outfit",
           -apple-system,
-          Segoe UI,
-          Roboto,
-          Helvetica,
-          Arial,
           sans-serif;
-        max-width: 720px;
-        margin: 40px auto;
-        padding: 0 20px;
-        color: #1a1a1a;
+        background: var(--bg);
+        color: var(--text);
         line-height: 1.6;
-      }
-      h1 {
-        font-size: 28px;
-      }
-      h2 {
-        font-size: 20px;
-        margin-top: 32px;
-      }
-      code {
-        background: #f0f0f0;
-        padding: 2px 5px;
-        border-radius: 3px;
-      }
-      .updated {
-        color: #666;
-        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
       }
       a {
-        color: #007a85;
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        opacity: 0.8;
+      }
+
+      /* Nav */
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 0;
+        backdrop-filter: blur(12px);
+      }
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      .nav-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-border);
+        border-radius: 20px;
+        padding: 6px 14px;
+        text-decoration: none;
+      }
+      .wordmark-text {
+        color: var(--accent);
+        font-weight: 800;
+        font-size: 11px;
+        letter-spacing: 2px;
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .nav-link {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 12px;
+        border-radius: 8px;
+        transition: color 0.15s;
+      }
+      .nav-link:hover {
+        color: var(--text);
+        opacity: 1;
+      }
+      .nav-cta {
+        background: var(--accent);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 8px 18px;
+        border-radius: 10px;
+        transition: opacity 0.15s;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.light) .nav-cta {
+          color: #000;
+        }
+      }
+      html.dark .nav-cta {
+        color: #000;
+      }
+      .nav-cta:hover {
+        opacity: 0.85;
+      }
+
+      /* Page hero */
+      .page-hero {
+        padding: 72px 0 56px;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+      }
+      .page-hero::before {
+        content: "";
+        position: absolute;
+        top: -80px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 600px;
+        height: 400px;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(181, 123, 255, 0.1) 0%,
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+      @media (prefers-color-scheme: light) {
+        html:not(.dark) .page-hero::before {
+          background: radial-gradient(
+            ellipse at center,
+            rgba(124, 58, 237, 0.06) 0%,
+            transparent 70%
+          );
+        }
+      }
+      html.light .page-hero::before {
+        background: radial-gradient(
+          ellipse at center,
+          rgba(124, 58, 237, 0.06) 0%,
+          transparent 70%
+        );
+      }
+      .page-hero > .container {
+        position: relative;
+        z-index: 1;
+      }
+      .page-inner { max-width: 720px; }
+      .page-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-border);
+        border-radius: 20px;
+        padding: 5px 12px;
+        margin-bottom: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+      .page-hero h1 {
+        font-size: clamp(32px, 5vw, 52px);
+        font-weight: 900;
+        letter-spacing: -1.5px;
+        line-height: 1.08;
+        margin-bottom: 12px;
+      }
+      .page-hero p {
+        font-size: 15px;
+        color: var(--muted);
+        max-width: 480px;
+      }
+
+      /* Content */
+      .content {
+        max-width: 720px;
+        padding: 64px 24px 96px;
+        margin: 0 auto;
+      }
+      .content h2 {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin: 48px 0 12px;
+        color: var(--text);
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .content h2:first-child {
+        margin-top: 0;
+      }
+      .content h3 {
+        font-size: 15px;
+        font-weight: 700;
+        margin: 24px 0 8px;
+        color: var(--text);
+      }
+      .content p {
+        font-size: 15px;
+        color: var(--muted);
+        line-height: 1.75;
+        margin-bottom: 16px;
+      }
+      .content ul {
+        list-style: none;
+        margin-bottom: 16px;
+      }
+      .content ul li {
+        font-size: 15px;
+        color: var(--muted);
+        line-height: 1.75;
+        padding: 6px 0 6px 20px;
+        position: relative;
+      }
+      .content ul li::before {
+        content: "–";
+        position: absolute;
+        left: 0;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .updated-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        margin-bottom: 40px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .contact-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-top: 48px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .contact-icon {
+        width: 44px;
+        height: 44px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-border);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+      }
+      .contact-card p {
+        margin: 0;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .contact-card a {
+        font-weight: 600;
+      }
+
+      /* Footer */
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 32px 0;
+      }
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .footer-copy {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+      }
+      .footer-links a {
+        font-size: 12px;
+        color: var(--muted);
+        transition: color 0.15s;
+      }
+      .footer-links a:hover {
+        color: var(--text);
+        opacity: 1;
+      }
+
+      @media (max-width: 600px) {
+        .nav-links .nav-link {
+          display: none;
+        }
+        .footer-inner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>ZStreak Privacy Policy</h1>
-    <p class="updated">Last updated: [fill in date at publish time]</p>
+    <!-- Nav -->
+    <nav>
+      <div class="container">
+        <div class="nav-inner">
+          <a href="index.html" class="wordmark">
+            <span>⚡</span>
+            <span class="wordmark-text">ZSTREAK</span>
+          </a>
+          <div class="nav-links">
+            <a href="index.html#features" class="nav-link">Features</a>
+            <a href="index.html#pricing" class="nav-link">Pricing</a>
+            <a href="terms.html" class="nav-link">Terms</a>
+            <button
+              id="themeToggle"
+              aria-label="Toggle light/dark mode"
+              style="
+                background: var(--surface-el);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                width: 36px;
+                height: 36px;
+                cursor: pointer;
+                font-size: 17px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition:
+                  background 0.2s,
+                  border-color 0.2s;
+                flex-shrink: 0;
+              "
+            >
+              🌙
+            </button>
+            <a
+              href="https://play.google.com/store/apps/details?id=com.zstreak.app"
+              class="nav-cta"
+              >Get the app ↗</a
+            >
+          </div>
+        </div>
+      </div>
+    </nav>
 
-    <p>
-      ZStreak ("we", "the app") is a habit-tracking app. This policy explains
-      what data the app collects, why, and how you can have it deleted.
-    </p>
+    <!-- Page hero -->
+    <div class="page-hero">
+      <div class="container">
+        <div class="page-badge">🔒 Legal</div>
+        <h1>Privacy Policy</h1>
+        <p>What data ZStreak collects, why, and how you can have it deleted.</p>
+      </div>
+    </div>
 
-    <h2>Data we collect</h2>
+    <!-- Content -->
+    <div class="content">
+      <div class="updated-badge">📅 Last updated: August 2026</div>
 
-    <h3>Account data (Firebase Authentication)</h3>
-    <p>
-      If you sign up or link an account, we collect your email address and, if
-      you use Google Sign-In, your Google account's basic profile information
-      (name, email, profile photo). This is used solely to authenticate you and
-      keep your habit data tied to your account across devices. Guest ("Continue
-      as guest") sessions do not collect any account data — your habits are
-      stored only on your device until you choose to link an account.
-    </p>
+      <h2>Overview</h2>
+      <p>
+        ZStreak ("we", "the app") is a habit-tracking app. This policy explains
+        what data the app collects, why, and how you can have it deleted. We
+        believe in keeping things simple and honest — we only collect what we
+        need to make the app work.
+      </p>
 
-    <h3>Habit and check-in data</h3>
-    <p>
-      The habits you create and the days you mark complete are stored either
-      locally on your device (guest mode, using local SQLite storage) or in our
-      cloud database (Google Cloud Firestore) if you have a linked account. This
-      data is never shared with third parties and is used only to power the
-      app's own features (your streaks, your grid, your reminders).
-    </p>
+      <h2>Data we collect</h2>
 
-    <h3>Purchase data (RevenueCat)</h3>
-    <p>
-      If you purchase a premium subscription, purchase and subscription-status
-      data (such as which plan you bought and whether it is active) is processed
-      by our payments provider, RevenueCat, and by Google Play Billing. We use
-      this only to determine whether premium features should be unlocked for
-      your account.
-    </p>
+      <h3>Account data (Firebase Authentication)</h3>
+      <p>
+        If you sign in with Google, we collect your Google account's basic
+        profile information (name, email, profile photo). This is used solely to
+        authenticate you and keep your habit data tied to your account across
+        devices. Guest sessions do not collect any account data — your habits
+        are stored only on your device until you choose to link an account.
+      </p>
 
-    <h3>Usage analytics (Firebase Analytics)</h3>
-    <p>
-      We collect anonymized usage data — such as which screens are opened,
-      whether a habit was created, and whether a guest session was linked to an
-      account — to understand how the app is used and to improve it. This data
-      is not used to identify you personally beyond your app-internal user ID.
-    </p>
+      <h3>Habit and check-in data</h3>
+      <p>
+        The habits you create and the days you mark complete are stored either:
+      </p>
+      <ul>
+        <li>Locally on your device (guest mode, using local SQLite storage)</li>
+        <li>
+          In our cloud database (Google Cloud Firestore) if you have a linked
+          account
+        </li>
+      </ul>
+      <p>
+        This data is never shared with third parties and is used only to power
+        the app's own features — your streaks, your grid, your reminders.
+      </p>
 
-    <h3>Crash and diagnostic data (Firebase Crashlytics)</h3>
-    <p>
-      If the app crashes or encounters an error, technical diagnostic
-      information (such as a stack trace and device model) is sent to Firebase
-      Crashlytics so we can find and fix the problem. This data does not include
-      your habit content.
-    </p>
+      <h3>Purchase data (RevenueCat)</h3>
+      <p>
+        If you purchase a premium subscription, purchase and subscription-status
+        data (such as which plan you bought and whether it is active) is
+        processed by our payments provider, RevenueCat, and by Google Play
+        Billing. We use this only to determine whether premium features should
+        be unlocked for your account.
+      </p>
 
-    <h2>Data deletion</h2>
-    <p>
-      If you have a linked account, you can permanently delete your account and
-      all associated data at any time from Settings → Delete Account. This
-      removes your Firestore data and your authentication record.
-    </p>
-    <p>
-      If you are using guest mode, your data lives only on your device. You can
-      clear it at any time from Settings → Clear My Data, or simply uninstall
-      the app.
-    </p>
+      <h3>Usage analytics (Firebase Analytics)</h3>
+      <p>
+        We collect anonymized usage data — such as which screens are opened,
+        whether a habit was created, and whether a guest session was linked to
+        an account — to understand how the app is used and to improve it. This
+        data is not used to identify you personally beyond your app-internal
+        user ID.
+      </p>
 
-    <h2>Data sharing</h2>
-    <p>
-      We do not sell your data. We share data only with the service providers
-      named above (Google Firebase, RevenueCat, Google Play Billing) as strictly
-      necessary to provide the app's functionality, under their own privacy and
-      data-processing terms.
-    </p>
+      <h3>Crash and diagnostic data (Firebase Crashlytics)</h3>
+      <p>
+        If the app crashes or encounters an error, technical diagnostic
+        information (such as a stack trace and device model) is sent to Firebase
+        Crashlytics so we can find and fix the problem. This data does not
+        include your habit content.
+      </p>
 
-    <h2>Contact</h2>
-    <p>
-      Questions about this policy:
-      <a href="mailto:zstreak26@gmail.com">zstreak26@gmail.com</a>
-    </p>
+      <h2>Data deletion</h2>
+      <p>
+        If you have a linked account, you can permanently delete your account
+        and all associated data at any time from
+        <strong>Settings → Delete Account</strong>. This removes your Firestore
+        data and your authentication record.
+      </p>
+      <p>
+        If you are using guest mode, your data lives only on your device. You
+        can clear it at any time from <strong>Settings → Clear My Data</strong>,
+        or simply uninstall the app.
+      </p>
+
+      <h2>Data sharing</h2>
+      <p>
+        We do not sell your data. We share data only with the service providers
+        named above (Google Firebase, RevenueCat, Google Play Billing) as
+        strictly necessary to provide the app's functionality, under their own
+        privacy and data-processing terms.
+      </p>
+
+      <h2>Children's privacy</h2>
+      <p>
+        ZStreak is not directed at children under 13. We do not knowingly
+        collect personal information from children under 13.
+      </p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        We may update this policy from time to time. We will update the "Last
+        updated" date at the top of this page when we do. Continued use of the
+        app after a change constitutes acceptance of the updated policy.
+      </p>
+
+      <div class="contact-card">
+        <div class="contact-icon">✉️</div>
+        <div>
+          <p>Questions about this policy? Reach out anytime.</p>
+          <p><a href="mailto:zstreak26@gmail.com">zstreak26@gmail.com</a></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <div class="container">
+        <div class="footer-inner">
+          <a href="index.html" class="wordmark">
+            <span>⚡</span>
+            <span class="wordmark-text">ZSTREAK</span>
+          </a>
+          <p class="footer-copy">
+            © 2026 ZStreak. Built different. Built for your streak.
+          </p>
+          <div class="footer-links">
+            <a href="privacy.html">Privacy Policy</a>
+            <a href="terms.html">Terms of Service</a>
+            <a href="mailto:zstreak26@gmail.com">Support</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var html = document.documentElement;
+        var btn = document.getElementById("themeToggle");
+        var prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)",
+        ).matches;
+        var stored = localStorage.getItem("theme");
+        var isDark = stored ? stored === "dark" : prefersDark;
+        function applyTheme(dark) {
+          isDark = dark;
+          html.classList.toggle("dark", dark);
+          html.classList.toggle("light", !dark);
+          if (btn) btn.textContent = dark ? "☀️" : "🌙";
+          localStorage.setItem("theme", dark ? "dark" : "light");
+        }
+        applyTheme(isDark);
+        if (btn)
+          btn.addEventListener("click", function () {
+            applyTheme(!isDark);
+          });
+      })();
+    </script>
   </body>
 </html>
