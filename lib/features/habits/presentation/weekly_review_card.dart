@@ -285,17 +285,22 @@ class WeeklyReviewCard extends ConsumerWidget {
                     ],
                   ),
 
-                  if (stats.totalCheckIns == 0) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'No check-ins recorded this week yet.',
-                      style: TextStyle(
-                        color: textMuted,
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                      ),
+                  // Space is always reserved (only the text toggles) — this
+                  // sits above the habit list in a scroll view, so making
+                  // it appear/disappear based on a check-in count that
+                  // changes on every check-in shifted the whole list the
+                  // instant the week's first check-in landed.
+                  const SizedBox(height: 8),
+                  Text(
+                    stats.totalCheckIns == 0
+                        ? 'No check-ins recorded this week yet.'
+                        : '',
+                    style: TextStyle(
+                      color: textMuted,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

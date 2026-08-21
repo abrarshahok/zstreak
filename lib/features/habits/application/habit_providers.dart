@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firestore_providers.dart';
@@ -36,9 +38,55 @@ final habitRepositoryProvider = Provider<HabitRepository>((ref) {
   );
 });
 
+/// [watchActiveHabits] re-emits its whole result whenever *any* matching
+/// document changes — on both backends (Firestore's snapshot listener and
+/// Drift's table-level `.watch()` both invalidate at that granularity).
+/// setCheckIn's streak recalculation writes currentStreak/longestStreak
+/// back onto the very same habit document/row this query watches, so a
+/// single check-in would otherwise re-emit — and rebuild — the entire
+/// habit list every time. Every screen that displays those two fields
+/// already sources them live from streakDetailProvider instead (see
+/// HabitTile, HabitGridCard, HabitDetailScreen), so this list only needs
+/// to change when something a check-in doesn't touch actually changes —
+/// `.distinct()` with a fingerprint that excludes exactly those two
+/// fields turns that write into a no-op for every listener of this
+/// provider, without moving where the fields live in either backend.
 final activeHabitsProvider = StreamProvider<List<Habit>>((ref) {
-  return ref.watch(habitRepositoryProvider).watchActiveHabits();
+  return ref
+      .watch(habitRepositoryProvider)
+      .watchActiveHabits()
+      .distinct(_sameHabitListStructure);
 });
+
+bool _sameHabitListStructure(List<Habit> a, List<Habit> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (_structuralFingerprint(a[i]) != _structuralFingerprint(b[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Every field except currentStreak/longestStreak — those are the two
+/// fields a check-in's streak recalculation writes, and the only ones
+/// this fingerprint must ignore for [_sameHabitListStructure] to do its
+/// job. jsonEncode gives frequencyConfig's toJson() map a stable,
+/// order-independent-enough string form without needing a deep-equals
+/// helper (FrequencyConfig has no == override).
+String _structuralFingerprint(Habit h) => [
+  h.id,
+  h.name,
+  h.emoji,
+  h.colorHex,
+  h.frequencyType.toDbValue(),
+  jsonEncode(h.frequencyConfig.toJson()),
+  h.reminderTime,
+  h.description,
+  h.sortOrder,
+  h.archivedAt?.toIso8601String(),
+  h.updatedAt.toIso8601String(),
+].join('|');
 
 final archivedHabitsProvider = StreamProvider<List<Habit>>((ref) {
   return ref.watch(habitRepositoryProvider).watchArchivedHabits();

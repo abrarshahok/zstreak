@@ -1548,10 +1548,15 @@ class _ProfileStatLine extends ConsumerWidget {
         ),
       );
     }
-    final bestStreak = habits.fold<int>(
-      0,
-      (best, h) => h.longestStreak > best ? h.longestStreak : best,
-    );
+    // Live per-habit longest streak — habit.longestStreak only refreshes
+    // on a real structural list change now that activeHabitsProvider
+    // suppresses check-in-only re-emissions (see its own doc comment).
+    final bestStreak = habits.fold<int>(0, (best, h) {
+      final live =
+          ref.watch(streakDetailProvider(h)).valueOrNull?.longestStreak ??
+          h.longestStreak;
+      return live > best ? live : best;
+    });
     final habitLabel = habits.length == 1 ? 'habit' : 'habits';
     return Text(
       '${habits.length} $habitLabel · 🔥 $bestStreak day best',

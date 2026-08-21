@@ -364,12 +364,16 @@ class _TodayFocusSliver extends ConsumerWidget {
     final allDone = total > 0 && doneCount == total;
 
     // Accent color: most-streaked habit's color, or AppColors.accent.
+    // Live per-habit streak — see the comment on _StreakSummaryBar.
+    int liveStreak(Habit h) =>
+        ref.watch(streakDetailProvider(h)).valueOrNull?.currentStreak ??
+        h.currentStreak;
     Color ringColor = AppColors.accent;
     if (todayHabits.isNotEmpty) {
       final mostStreaked = todayHabits.reduce(
-        (a, b) => a.currentStreak >= b.currentStreak ? a : b,
+        (a, b) => liveStreak(a) >= liveStreak(b) ? a : b,
       );
-      if (mostStreaked.currentStreak > 0) {
+      if (liveStreak(mostStreaked) > 0) {
         ringColor = colorFromHex(mostStreaked.colorHex);
       }
     }
@@ -808,9 +812,14 @@ class HabitGridCard extends ConsumerWidget {
     final checkIn = ref.watch(checkInProvider(CheckInQuery(habit.id, today)));
     final isDone = checkIn.valueOrNull?.completed ?? false;
     final accentColor = colorFromHex(habit.colorHex);
-    final isOnFire = habit.currentStreak >= 7;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final streakDetail = ref.watch(streakDetailProvider(habit));
+    // See the matching comment in HabitTile — sourced from streakDetail
+    // (already watched, live per-habit) instead of habit.currentStreak,
+    // which only refreshes when the whole habit list re-emits.
+    final currentStreak =
+        streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
+    final isOnFire = currentStreak >= 7;
 
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
@@ -922,7 +931,7 @@ class HabitGridCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${habit.currentStreak}d streak',
+                    '${currentStreak}d streak',
                     style: TextStyle(
                       color: textMuted,
                       fontSize: 11,
@@ -959,16 +968,22 @@ class HabitGridCard extends ConsumerWidget {
               ),
 
               // ── Done indicator bar ─────────────────────────────────────
-              if (isDone) ...[
-                const SizedBox(height: 8),
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: accentColor.withValues(alpha: 0.6),
-                  ),
+              // Space is always reserved (only the fill color toggles) —
+              // conditionally inserting this used to change the card's
+              // total content height, which a fixed-aspect-ratio grid
+              // cell has no slack for. The Spacer above absorbed the
+              // difference by resizing, which visibly nudged the mini
+              // grid up/down the instant you tapped check-in.
+              const SizedBox(height: 8),
+              Container(
+                height: 3,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(2),
+                  color: isDone
+                      ? accentColor.withValues(alpha: 0.6)
+                      : Colors.transparent,
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -1474,19 +1489,28 @@ class _IconBtn extends StatelessWidget {
 
 // ─── Streak Summary Bar ───────────────────────────────────────────────────────
 
-class _StreakSummaryBar extends StatelessWidget {
+class _StreakSummaryBar extends ConsumerWidget {
   const _StreakSummaryBar({required this.habits, required this.isDark});
 
-  final List habits;
+  final List<Habit> habits;
   final bool isDark;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Live per-habit streak, same reasoning as HabitTile/HabitGridCard —
+    // habit.currentStreak only refreshes on a real structural list
+    // change now that activeHabitsProvider suppresses check-in-only
+    // re-emissions, so this bar (which aggregates across every habit)
+    // needs its own live source instead of relying on that field.
+    int liveStreak(Habit h) =>
+        ref.watch(streakDetailProvider(h)).valueOrNull?.currentStreak ??
+        h.currentStreak;
+
     final totalStreaks = habits.fold<int>(
       0,
-      (sum, h) => sum + (h.currentStreak as int),
+      (sum, h) => sum + liveStreak(h),
     );
-    final doneToday = habits.where((h) => h.currentStreak > 0).length;
+    final doneToday = habits.where((h) => liveStreak(h) > 0).length;
     final total = habits.length;
     final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;

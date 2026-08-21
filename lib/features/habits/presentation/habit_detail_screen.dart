@@ -25,8 +25,22 @@ class HabitDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detail = ref.watch(streakDetailProvider(habit));
-    final accentColor = colorFromHex(habit.colorHex);
+    // [habit] is a snapshot from whenever this screen was pushed — it
+    // never updates on its own, so without this, editing the habit's
+    // name/emoji/color/frequency via EditHabitScreen and popping back
+    // kept showing the pre-edit values until the screen was closed and
+    // reopened. activeHabitsProvider already has the live copy; fall
+    // back to the pushed-in snapshot if it's not in the loaded list yet
+    // (e.g. the first frame, while it's still loading).
+    final liveHabits = ref.watch(activeHabitsProvider).valueOrNull;
+    final currentHabit = liveHabits?.firstWhere(
+          (h) => h.id == habit.id,
+          orElse: () => habit,
+        ) ??
+        habit;
+
+    final detail = ref.watch(streakDetailProvider(currentHabit));
+    final accentColor = colorFromHex(currentHabit.colorHex);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppColors.background : AppColors.backgroundLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
@@ -43,14 +57,14 @@ class HabitDetailScreen extends ConsumerWidget {
       body: detail.when(
         loading: () => CustomScrollView(
           slivers: [
-            _HeroHeader(habit: habit, accentColor: accentColor, isDark: isDark),
+            _HeroHeader(habit: currentHabit, accentColor: accentColor, isDark: isDark),
             SliverToBoxAdapter(child: _HabitDetailSkeleton(isDark: isDark)),
           ],
         ),
         error: (error, _) => Center(child: Text('$error')),
         data: (result) => CustomScrollView(
           slivers: [
-            _HeroHeader(habit: habit, accentColor: accentColor, isDark: isDark),
+            _HeroHeader(habit: currentHabit, accentColor: accentColor, isDark: isDark),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
@@ -106,8 +120,8 @@ class HabitDetailScreen extends ConsumerWidget {
                     ),
 
                     // ── Description ────────────────────────────────────────
-                    if (habit.description != null &&
-                        habit.description!.isNotEmpty)
+                    if (currentHabit.description != null &&
+                        currentHabit.description!.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: Container(
@@ -122,7 +136,7 @@ class HabitDetailScreen extends ConsumerWidget {
                             border: Border.all(color: border, width: 1),
                           ),
                           child: Text(
-                            habit.description!,
+                            currentHabit.description!,
                             style: TextStyle(
                               color: textMuted,
                               fontSize: 13,
@@ -132,11 +146,11 @@ class HabitDetailScreen extends ConsumerWidget {
                         ).animate().fadeIn(delay: 210.ms),
                       ),
 
-                    if (habit.frequencyType == FrequencyType.xPerWeek)
+                    if (currentHabit.frequencyType == FrequencyType.xPerWeek)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: _WeekProgressChip(
-                          habit: habit,
+                          habit: currentHabit,
                           result: result,
                           accentColor: accentColor,
                           surface: surface,
@@ -187,7 +201,7 @@ class HabitDetailScreen extends ConsumerWidget {
 
                     // ── Monthly contribution grid ───────────────────────────
                     _MonthlyContributionGrid(
-                      habit: habit,
+                      habit: currentHabit,
                       days: result.days,
                       accentColor: accentColor,
                       surface: surface,

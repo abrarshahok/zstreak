@@ -41,7 +41,6 @@ class HabitTile extends ConsumerWidget {
     final checkIn = ref.watch(checkInProvider(CheckInQuery(habit.id, today)));
     final isDone = checkIn.valueOrNull?.completed ?? false;
     final accentColor = colorFromHex(habit.colorHex);
-    final isOnFire = habit.currentStreak >= 7;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
@@ -50,6 +49,16 @@ class HabitTile extends ConsumerWidget {
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
     final streakDetail = ref.watch(streakDetailProvider(habit));
+    // Sourced from streakDetail (already watched per-habit, live off the
+    // check-ins subcollection) rather than habit.currentStreak — the
+    // latter only updates when the *whole* habit list re-emits, which a
+    // single check-in triggers anyway since currentStreak is stored on
+    // the same document watchActiveHabits() queries. Reading it here
+    // instead means this tile's own number is never a stream-emission
+    // behind the truth, and doesn't depend on that list-level rebuild.
+    final currentStreak =
+        streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
+    final isOnFire = currentStreak >= 7;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -147,7 +156,7 @@ class HabitTile extends ConsumerWidget {
                               ),
                               const SizedBox(width: 5),
                               Text(
-                                '${habit.currentStreak} day streak',
+                                '$currentStreak day streak',
                                 style: TextStyle(
                                   color: textMuted,
                                   fontSize: 12,

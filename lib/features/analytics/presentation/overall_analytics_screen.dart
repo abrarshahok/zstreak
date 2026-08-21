@@ -535,8 +535,16 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
       (s, r) => math.max(s, r.longestStreak),
     );
 
+    // Live per-habit streak from `results` (already watched above via
+    // streakDetailProvider) rather than habit.currentStreak, which only
+    // refreshes on a real structural list change now that
+    // activeHabitsProvider suppresses check-in-only re-emissions.
     final totalXP =
-        widget.habits.fold<int>(0, (s, h) => s + h.currentStreak) * 10;
+        widget.habits.fold<int>(
+          0,
+          (s, h) => s + (results[h.id]?.currentStreak ?? h.currentStreak),
+        ) *
+        10;
 
     final consistencyScore = (avgRate * 100).round().clamp(0, 100);
 
@@ -1650,9 +1658,12 @@ class _StreakLeaderboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final border = isDark ? AppColors.border : AppColors.borderLight;
 
-    // Sort by current streak descending
+    // Sort by current streak descending — live from `results`, not
+    // habit.currentStreak (see the comment on _AnalyticsBodyState's
+    // totalXP for why that field alone can't be trusted here).
+    int liveStreak(Habit h) => results[h.id]?.currentStreak ?? h.currentStreak;
     final sorted = [...habits]
-      ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+      ..sort((a, b) => liveStreak(b).compareTo(liveStreak(a)));
 
     final medals = ['🥇', '🥈', '🥉'];
 
@@ -1667,7 +1678,7 @@ class _StreakLeaderboard extends StatelessWidget {
           final i = entry.key;
           final habit = entry.value;
           final result = results[habit.id];
-          final current = habit.currentStreak;
+          final current = liveStreak(habit);
           final best = result?.longestStreak ?? current;
           final isLast = i == sorted.length - 1;
 
