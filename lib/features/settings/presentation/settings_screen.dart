@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -18,6 +17,7 @@ import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/theme/theme_mode_providers.dart';
 import '../../../dev/seed_demo_data.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
+import '../../auth/application/account_status_providers.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/auth_gate.dart';
 import '../../data_export/data_export_providers.dart';
@@ -196,12 +196,13 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         _Divider(isDark: isDark),
                         _SettingsTile(
-                          icon: Icons.no_accounts_outlined,
-                          label: 'Delete account',
+                          icon: Icons.pause_circle_outline,
+                          label: 'Deactivate account',
+                          subtitle: 'Data is kept, not deleted — reactivate anytime',
                           accent: AppColors.danger,
                           textPrimary: AppColors.danger,
                           textMuted: textMuted,
-                          onTap: () => _confirmDeleteAccount(context, ref),
+                          onTap: () => _confirmDeactivateAccount(context, ref),
                         ),
                       ],
                     ],
@@ -247,6 +248,13 @@ class SettingsScreen extends ConsumerWidget {
                     _SettingsCard(
                       isDark: isDark,
                       children: [
+                        _DevProModeTile(
+                          isDark: isDark,
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                        ),
+                        _Divider(isDark: isDark),
                         _SettingsTile(
                           icon: Icons.science_outlined,
                           label: 'Seed demo data',
@@ -407,53 +415,45 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _confirmDeleteAccount(
+  /// Replaces what used to be an immediate, permanent "Delete account":
+  /// no Firestore data is deleted, only hidden. A `status: inactive` field
+  /// gets set on the account's own doc, which Firestore's security rules
+  /// now check on every habit/check-in/profile read and write — so this
+  /// is a real access change, not just a client-side flag the UI happens
+  /// to respect. Reactivating (from the login-time prompt) restores
+  /// everything exactly as it was.
+  Future<void> _confirmDeactivateAccount(
     BuildContext context,
     WidgetRef ref,
   ) async {
     final confirmed = await _showFlatConfirmDialog(
       context: context,
-      title: 'Delete account?',
+      title: 'Deactivate account?',
       body:
-          'This permanently deletes your account and all your data. This can\'t be undone.',
-      confirmLabel: 'Delete account',
+          "Your data stays exactly as it is — nothing is deleted. You'll be signed out, and your habits become inaccessible until you reactivate. You have 30 days to change your mind before that guarantee expires.",
+      confirmLabel: 'Deactivate',
       isDanger: true,
     );
     if (confirmed != true) return;
 
+    final uid = ref.read(authRepositoryProvider).currentUser?.uid;
+    if (uid == null) return;
+
     try {
-      await ref.read(accountDeletionServiceProvider).deleteAccount();
-    } on FirebaseAuthException catch (e) {
-      if (!context.mounted) return;
-      if (e.code == 'requires-recent-login') {
-        // Firebase requires a fresh sign-in before deleting the Auth record.
-        // Sign the user out so AuthGate sends them back to the sign-in screen,
-        // where they can re-authenticate and then retry deletion.
-        AppSnackBar.show(
-          context,
-          'For security, please sign in again and then delete your account.',
-          type: SnackBarType.warning,
-          duration: const Duration(seconds: 4),
-        );
-        await ref.read(authRepositoryProvider).signOut();
-        return;
-      }
-      AppSnackBar.show(
-        context,
-        'Could not delete account: ${e.message}',
-        type: SnackBarType.error,
-      );
-      return;
+      await ref.read(accountStatusRepositoryProvider).deactivate(uid);
     } catch (e) {
       if (!context.mounted) return;
       AppSnackBar.show(
         context,
-        'Could not delete account: $e',
+        'Could not deactivate account: $e',
         type: SnackBarType.error,
       );
       return;
     }
 
+    // Sign out immediately — the account is now inactive, so there's
+    // nothing left for this session to keep showing.
+    await ref.read(authRepositoryProvider).signOut();
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -815,6 +815,84 @@ class _ThemeModeTile extends ConsumerWidget {
   }
 }
 
+// ── Dev: simulate Pro entitlement ──────────────────────────────────────────────
+
+/// A live, restart-free switch for [devProOverrideProvider] — previously
+/// this could only be flipped by editing its default and doing a full
+/// hot *restart* (a hot reload alone keeps the provider's already-built
+/// state), which read as "Pro mode doesn't work" when it was really just
+/// stale state from before the edit.
+class _DevProModeTile extends ConsumerWidget {
+  const _DevProModeTile({
+    required this.isDark,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+  });
+
+  final bool isDark;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOn = ref.watch(devProOverrideProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.workspace_premium_outlined,
+              color: accent,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Simulate Pro',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  isOn
+                      ? 'On — every paywall gate is unlocked'
+                      : 'Off — real entitlement is checked',
+                  style: TextStyle(color: textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: isOn,
+            activeThumbColor: accent,
+            onChanged: (v) {
+              ref.read(devProOverrideProvider.notifier).state = v;
+              // Force an immediate re-check instead of waiting for the next
+              // auth-state change to naturally re-run the provider.
+              ref.invalidate(hasActiveEntitlementProvider);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Notification permission tile ──────────────────────────────────────────────
 
 class _NotificationPermissionTile extends ConsumerStatefulWidget {
@@ -989,6 +1067,18 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.06);
 
+    final initialsFallback = Center(
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: widget.accent,
+          fontWeight: FontWeight.w800,
+          fontSize: 18,
+        ),
+      ),
+    );
+    final hasPhoto = (profile.photoUrl ?? '').isNotEmpty;
+
     return _SettingsCard(
       isDark: widget.isDark,
       children: [
@@ -1007,7 +1097,8 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
             child: Row(
               children: [
-                // Avatar — flat solid, no gradient, no glow
+                // Avatar — Google profile photo when available, initials
+                // fallback otherwise (guests, or the image failing to load).
                 Container(
                   width: 52,
                   height: 52,
@@ -1019,16 +1110,18 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                       width: 1.5,
                     ),
                   ),
-                  child: Center(
-                    child: Text(
-                      initials,
-                      style: TextStyle(
-                        color: widget.accent,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
+                  child: hasPhoto
+                      ? ClipOval(
+                          child: Image.network(
+                            profile.photoUrl!,
+                            width: 52,
+                            height: 52,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                initialsFallback,
+                          ),
+                        )
+                      : initialsFallback,
                 ),
                 const SizedBox(width: 14),
                 Expanded(

@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../habits/application/habit_providers.dart';
+import '../../monetization/application/entitlement_providers.dart';
+import '../../monetization/presentation/paywall_navigation.dart';
 import '../application/widget_providers.dart';
 
 /// Shown instead of the normal app when Android launches us via the
@@ -12,6 +15,14 @@ import '../application/widget_providers.dart';
 /// home screen"). Picking a habit here persists it per widget-instance-id,
 /// not globally, since a user may place several widgets for different
 /// habits.
+///
+/// This fires on *every* widget placement, regardless of how it was
+/// started — including Android's own system widget picker, which has no
+/// idea the app's Settings screen gates "Add home screen widget" behind
+/// Pro. Gating happens here instead, at the one place Android always
+/// routes through: if the user isn't Pro, this never shows the habit list
+/// or calls [HomeWidget.finishHomeWidgetConfigure], so Android cancels the
+/// placement — there is no way to end up with a working widget for free.
 class WidgetConfigureScreen extends ConsumerWidget {
   const WidgetConfigureScreen({super.key, required this.widgetId});
 
@@ -24,7 +35,6 @@ class WidgetConfigureScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final habits = ref.watch(activeHabitsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? AppColors.background : AppColors.backgroundLight;
     final textPrimary = isDark
@@ -33,6 +43,85 @@ class WidgetConfigureScreen extends ConsumerWidget {
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
+    if (!isPro) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withValues(alpha: 0.12),
+                      border: Border.all(color: accent.withValues(alpha: 0.3)),
+                    ),
+                    child: Icon(
+                      Icons.widgets_outlined,
+                      color: accent,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Home screen widgets are Pro',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Upgrade to add a live streak widget to your home screen. This one won't be placed until you do.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textMuted,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  GestureDetector(
+                    onTap: () => navigateToPaywall(context, ref),
+                    child: Container(
+                      width: double.infinity,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Unlock Pro',
+                          style: TextStyle(
+                            color: isDark ? Colors.black : Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final habits = ref.watch(activeHabitsProvider);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -66,12 +155,7 @@ class WidgetConfigureScreen extends ConsumerWidget {
         ),
       ),
       body: habits.when(
-        loading: () => Center(
-          child: CircularProgressIndicator(
-            color: isDark ? AppColors.accent : AppColors.accentTextOnLight,
-            strokeWidth: 2,
-          ),
-        ),
+        loading: () => _WidgetHabitListSkeleton(isDark: isDark),
         error: (error, _) => Center(
           child: Text('$error', style: TextStyle(color: textMuted)),
         ),
@@ -133,6 +217,41 @@ class WidgetConfigureScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ── Loading skeleton ─────────────────────────────────────────────────────────
+
+class _WidgetHabitListSkeleton extends StatelessWidget {
+  const _WidgetHabitListSkeleton({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          itemCount: 6,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) => ShimmerCard(
+            colors: colors,
+            radius: 10,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                ShimmerCircle(size: 22, color: colors.border),
+                const SizedBox(width: 12),
+                Expanded(child: ShimmerBlock(height: 14, color: colors.border)),
+                const SizedBox(width: 12),
+                ShimmerCircle(size: 18, color: colors.border),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -68,7 +68,14 @@ class _UserProfileQuestionsScreenState
   void initState() {
     super.initState();
     final profile = ref.read(userProfileProvider);
-    _nameCtrl.text = profile.name;
+    // Google already told us the account's display name — prefill it
+    // rather than making a just-signed-in user retype what we already
+    // know. Only when there's no locally-saved name yet, so it never
+    // clobbers a name someone already chose to edit.
+    final googleName = widget.alreadySignedIn
+        ? ref.read(authRepositoryProvider).currentUser?.displayName
+        : null;
+    _nameCtrl.text = profile.name.isNotEmpty ? profile.name : (googleName ?? '');
     if (profile.age.isNotEmpty) {
       final parsed = int.tryParse(profile.age);
       if (parsed != null && parsed >= _minAge && parsed <= _maxAge) {
@@ -245,11 +252,19 @@ class _UserProfileQuestionsScreenState
         child: Column(
           children: [
             // ── Top bar ───────────────────────────────────────────────────
+            // Left padding is 4, not 16 — this screen builds its own top
+            // row instead of a real AppBar (needs the progress bar and
+            // Skip inline), and stacking a 16px margin on top of the
+            // button's own default touch-target padding put the icon
+            // noticeably further from the edge than every other screen's
+            // AppBar-based back button. Using IconButton's own default
+            // sizing (instead of the tighter custom 38x38 box) plus a 4px
+            // outer margin lands the icon at the same position an AppBar
+            // leading icon sits at everywhere else in the app.
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.fromLTRB(4, 12, 16, 0),
               child: Row(
                 children: [
-                  // Back button — plain icon, no border
                   IconButton(
                     onPressed: _back,
                     icon: Icon(
@@ -257,13 +272,11 @@ class _UserProfileQuestionsScreenState
                       size: 18,
                       color: textPrimary,
                     ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 38,
-                    ),
                   ),
-                  const SizedBox(width: 12),
+                  // The button's own default touch-target padding already
+                  // leaves ~15px between the icon and its right edge, so a
+                  // smaller extra gap here (was 12, doubling up) is enough.
+                  const SizedBox(width: 4),
                   // Progress bar — no glow
                   Expanded(
                     child: _ProgressBar(

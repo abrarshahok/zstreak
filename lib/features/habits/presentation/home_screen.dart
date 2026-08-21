@@ -9,6 +9,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
@@ -23,7 +24,6 @@ import '../domain/habit_template.dart';
 import 'archived_habits_screen.dart';
 import 'edit_habit_screen.dart';
 import 'habit_detail_screen.dart';
-import 'habit_templates_screen.dart';
 import 'habit_tile.dart';
 import 'weekly_review_card.dart';
 
@@ -94,7 +94,7 @@ class HomeScreen extends ConsumerWidget {
               loading: () =>
                   SliverToBoxAdapter(child: _HabitListSkeleton(isDark: isDark)),
               error: (error, _) =>
-                  SliverToBoxAdapter(child: Center(child: Text('$error'))),
+                  SliverToBoxAdapter(child: _HabitsLoadError(isDark: isDark)),
               data: (list) {
                 if (list.isEmpty) {
                   return SliverToBoxAdapter(
@@ -102,18 +102,27 @@ class HomeScreen extends ConsumerWidget {
                   );
                 }
 
-                // ── Today Focus mode ─────────────────────────────────────
-                if (focusMode == _FocusMode.today) {
-                  return _TodayFocusSliver(habits: list, isDark: isDark);
-                }
-
-                // ── Determine visible vs locked habits ───────────────────
+                // ── Determine visible vs locked habits (both focus modes) ──
+                // Computed before branching on focus mode — Today Focus
+                // used to receive the full unfiltered `list` here, which
+                // meant a free user hit their habit limit in "All" but saw
+                // every habit, paywall gate and all, the moment they
+                // switched to "Today". Same gate, both views now.
                 final visibleList = (!isPro && list.length > limit)
                     ? list.sublist(0, limit)
                     : list;
                 final lockedCount = (!isPro && list.length > limit)
                     ? list.length - limit
                     : 0;
+
+                // ── Today Focus mode ─────────────────────────────────────
+                if (focusMode == _FocusMode.today) {
+                  return _TodayFocusSliver(
+                    habits: visibleList,
+                    isDark: isDark,
+                    lockedCount: lockedCount,
+                  );
+                }
 
                 // ── All mode ─────────────────────────────────────────────
                 return SliverMainAxisGroup(
@@ -229,108 +238,41 @@ class _AddHabitFab extends ConsumerWidget {
 
 // ─── Habit list skeleton (loading state) ─────────────────────────────────────
 
-class _HabitListSkeleton extends StatefulWidget {
+class _HabitListSkeleton extends StatelessWidget {
   const _HabitListSkeleton({required this.isDark});
 
   final bool isDark;
 
   @override
-  State<_HabitListSkeleton> createState() => _HabitListSkeletonState();
-}
-
-class _HabitListSkeletonState extends State<_HabitListSkeleton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _shimmer;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _shimmer = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _shimmer,
-      builder: (context, _) {
-        final base = widget.isDark ? AppColors.surface : AppColors.surfaceLight;
-        final highlight = widget.isDark
-            ? AppColors.surfaceElevated
-            : AppColors.surfaceElevatedLight;
-        final shimmedColor = Color.lerp(base, highlight, _shimmer.value)!;
-        final border = widget.isDark ? AppColors.border : AppColors.borderLight;
-
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
         return Column(
           children: List.generate(5, (i) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Container(
+              child: ShimmerCard(
+                colors: colors,
                 height: 80,
-                decoration: BoxDecoration(
-                  color: shimmedColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: border, width: 1),
-                ),
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 child: Row(
                   children: [
-                    // Emoji circle placeholder
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: border,
-                      ),
-                    ),
+                    ShimmerCircle(size: 44, color: colors.border),
                     const SizedBox(width: 12),
-                    // Text lines placeholder
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            height: 13,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: border,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
+                          ShimmerBlock(height: 13, width: double.infinity, color: colors.border),
                           const SizedBox(height: 8),
-                          Container(
-                            height: 10,
-                            width: 80,
-                            decoration: BoxDecoration(
-                              color: border,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
+                          ShimmerBlock(height: 10, width: 80, color: colors.border),
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Check circle placeholder
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: border,
-                      ),
-                    ),
+                    ShimmerCircle(size: 40, color: colors.border),
                   ],
                 ),
               ),
@@ -342,13 +284,65 @@ class _HabitListSkeletonState extends State<_HabitListSkeleton>
   }
 }
 
+// ─── Habits load error (self-healing) ────────────────────────────────────────
+//
+// A permission-denied right here immediately after a status change (e.g.
+// reactivating a deactivated account) is usually just Firestore's local
+// cache reacting to that write before the server has finished propagating
+// it to this listener's own rule evaluation — a transient race, not a
+// real failure. A Riverpod StreamProvider won't recover on its own once
+// the underlying stream has already terminated with an error, even once
+// the data source would allow it again, so this retries automatically
+// once instead of leaving a raw error message stuck until the user finds
+// a manual refresh — or, as happened before this existed, a full hot
+// restart, since that's the only thing that recreates the provider fresh.
+// Shown as the same shimmer skeleton as a normal load (not a spinner +
+// retry button) since to the user this is indistinguishable from habits
+// just taking a moment to load.
+class _HabitsLoadError extends ConsumerStatefulWidget {
+  const _HabitsLoadError({required this.isDark});
+
+  final bool isDark;
+
+  @override
+  ConsumerState<_HabitsLoadError> createState() => _HabitsLoadErrorState();
+}
+
+class _HabitsLoadErrorState extends ConsumerState<_HabitsLoadError> {
+  bool _retried = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (!mounted || _retried) return;
+      _retried = true;
+      ref.invalidate(activeHabitsProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _HabitListSkeleton(isDark: widget.isDark);
+  }
+}
+
 // ─── Today Focus Sliver ───────────────────────────────────────────────────────
 
 class _TodayFocusSliver extends ConsumerWidget {
-  const _TodayFocusSliver({required this.habits, required this.isDark});
+  const _TodayFocusSliver({
+    required this.habits,
+    required this.isDark,
+    this.lockedCount = 0,
+  });
 
   final List<Habit> habits;
   final bool isDark;
+
+  /// Habits withheld by the free-tier limit — already excluded from
+  /// [habits] by the caller. Shown here as a lock card, same as "All" mode,
+  /// instead of just quietly not appearing.
+  final int lockedCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -427,6 +421,12 @@ class _TodayFocusSliver extends ConsumerWidget {
                   .fadeIn(delay: (60 + 40 * index).ms)
                   .slideY(begin: 0.06, duration: 250.ms, curve: Curves.easeOut);
             },
+          ),
+
+        // ── Paywall gate card (free tier / expired) — same as All mode ──
+        if (lockedCount > 0)
+          SliverToBoxAdapter(
+            child: _PaywallGateCard(lockedCount: lockedCount, isDark: isDark),
           ),
       ],
     );
@@ -1602,7 +1602,6 @@ class _EmptyStateWithTemplates extends StatelessWidget {
         ? AppColors.textPrimary
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
-    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1741,58 +1740,6 @@ class _EmptyStateWithTemplates extends StatelessWidget {
           }),
 
           const SizedBox(height: 16),
-
-          // ── Browse all templates button ────────────────────────────────────
-          GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const HabitTemplatesScreen()),
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: accent.withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.grid_view_rounded, size: 16, color: accent),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Browse all templates',
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.06),
-
-          const SizedBox(height: 12),
-
-          // ── Divider with "or" ─────────────────────────────────────────────
-          Row(
-            children: [
-              Expanded(child: Container(height: 1, color: border)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'or',
-                  style: TextStyle(color: textMuted, fontSize: 12),
-                ),
-              ),
-              Expanded(child: Container(height: 1, color: border)),
-            ],
-          ).animate().fadeIn(delay: 440.ms),
-
-          const SizedBox(height: 12),
 
           // ── Create from scratch button ─────────────────────────────────────
           GestureDetector(

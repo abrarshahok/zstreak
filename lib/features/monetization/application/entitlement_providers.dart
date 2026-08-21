@@ -18,7 +18,7 @@ final entitlementRepositoryProvider = Provider<EntitlementRepository>(
 /// Dev-only toggle: simulates Pro (`true`) or Free (`false`) at runtime.
 /// Only active in debug builds (`kDebugMode`). Ignored in release.
 /// Defaults to `true` so debug builds start as Pro.
-final devProOverrideProvider = StateProvider<bool>((ref) => false);
+final devProOverrideProvider = StateProvider<bool>((ref) => true);
 
 /// Whether the current user has an active premium entitlement.
 ///

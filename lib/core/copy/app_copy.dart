@@ -24,13 +24,6 @@ class AppCopy {
       "No cap, this is the simplest habit tracker you'll use.";
   static const String onboardingSignUp = 'Sign up';
 
-  // Notification permission prompt (Section 3, screen 3)
-  static const String notificationPromptHeadline = 'Never miss a day.';
-  static const String notificationPromptBody =
-      "We'll remind you at the time you pick for each habit. That's it — no spam.";
-  static const String notificationPromptEnable = 'Enable reminders';
-  static const String notificationPromptSkip = 'Not now';
-
   // First habit creation (Section 3, screen 4)
   static const String firstHabitHeadline = 'Create your first habit.';
   static const String firstHabitCreated =

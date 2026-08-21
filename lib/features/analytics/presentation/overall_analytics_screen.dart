@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../habits/application/habit_providers.dart';
 import '../../habits/domain/habit.dart';
 import '../../habits/domain/streak_calculator.dart';
@@ -103,9 +104,7 @@ class OverallAnalyticsScreen extends ConsumerWidget {
               surface: surface,
             )
           : habitsAsync.when(
-              loading: () => Center(
-                child: CircularProgressIndicator(color: accent, strokeWidth: 2),
-              ),
+              loading: () => _AnalyticsSkeleton(isDark: isDark),
               error: (e, _) => Center(child: Text('$e')),
               data: (habits) {
                 if (habits.isEmpty) {
@@ -272,6 +271,119 @@ class _AnalyticsProLock extends ConsumerWidget {
   }
 }
 
+// ── Loading skeleton ─────────────────────────────────────────────────────────
+//
+// Mirrors _AnalyticsBody's real layout (filter row, consistency ring card,
+// 4-stat grid, two chart cards, a breakdown list) so the page doesn't jump
+// around once real data arrives. Used both for the outer habits-list load
+// and the inner per-habit streakDetailProvider load.
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+          children: [
+            ShimmerCard(colors: colors, height: 36, radius: 10, padding: EdgeInsets.zero, child: const SizedBox()),
+            const SizedBox(height: 16),
+            ShimmerCard(
+              colors: colors,
+              height: 120,
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  ShimmerCircle(size: 80, color: colors.border),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ShimmerBlock(height: 14, width: 100, color: colors.border),
+                        const SizedBox(height: 10),
+                        ShimmerBlock(height: 11, width: double.infinity, color: colors.border),
+                        const SizedBox(height: 10),
+                        ShimmerBlock(height: 5, width: double.infinity, radius: 4, color: colors.border),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 2.0,
+              children: List.generate(4, (i) {
+                return ShimmerCard(
+                  colors: colors,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      ShimmerCircle(size: 22, color: colors.border),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ShimmerBlock(height: 9, width: 50, color: colors.border),
+                            const SizedBox(height: 6),
+                            ShimmerBlock(height: 16, width: 36, color: colors.border),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+            ShimmerBlock(height: 13, width: 90, color: colors.border),
+            const SizedBox(height: 10),
+            ShimmerCard(colors: colors, height: 130, child: const SizedBox()),
+            const SizedBox(height: 20),
+            ShimmerBlock(height: 13, width: 90, color: colors.border),
+            const SizedBox(height: 10),
+            ShimmerCard(colors: colors, height: 80, child: const SizedBox()),
+            const SizedBox(height: 20),
+            ShimmerBlock(height: 13, width: 120, color: colors.border),
+            const SizedBox(height: 10),
+            ShimmerCard(
+              colors: colors,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                children: List.generate(3, (i) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        ShimmerCircle(size: 8, color: colors.border),
+                        const SizedBox(width: 10),
+                        Expanded(child: ShimmerBlock(height: 13, color: colors.border)),
+                        const SizedBox(width: 10),
+                        ShimmerBlock(height: 20, width: 40, radius: 6, color: colors.border),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 class _EmptyAnalytics extends StatelessWidget {
@@ -390,9 +502,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
     };
 
     if (asyncResults.values.any((a) => a.isLoading && !a.hasValue)) {
-      return Center(
-        child: CircularProgressIndicator(color: widget.accent, strokeWidth: 2),
-      );
+      return _AnalyticsSkeleton(isDark: widget.isDark);
     }
 
     final results = <String, StreakResult>{

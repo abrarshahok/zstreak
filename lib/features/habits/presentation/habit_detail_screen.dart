@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../application/habit_providers.dart';
@@ -40,8 +41,11 @@ class HabitDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: bg,
       body: detail.when(
-        loading: () => Center(
-          child: CircularProgressIndicator(color: accentColor, strokeWidth: 2),
+        loading: () => CustomScrollView(
+          slivers: [
+            _HeroHeader(habit: habit, accentColor: accentColor, isDark: isDark),
+            SliverToBoxAdapter(child: _HabitDetailSkeleton(isDark: isDark)),
+          ],
         ),
         error: (error, _) => Center(child: Text('$error')),
         data: (result) => CustomScrollView(
@@ -191,6 +195,7 @@ class HabitDetailScreen extends ConsumerWidget {
                       isDark: isDark,
                       textPrimary: textPrimary,
                       textMuted: textMuted,
+                      isPro: isPro,
                     ).animate().fadeIn(delay: 280.ms),
 
                     const SizedBox(height: 24),
@@ -312,6 +317,56 @@ class HabitDetailScreen extends ConsumerWidget {
   }
 }
 
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
+//
+// The hero header renders instantly from [habit] (already known — passed
+// in from the tapped tile), so only the part that depends on the async
+// [streakDetailProvider] result needs a placeholder: the 3 stat cards, the
+// monthly grid, and the two chart cards below it.
+class _HabitDetailSkeleton extends StatelessWidget {
+  const _HabitDetailSkeleton({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: List.generate(3, (i) {
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: i == 0 ? 0 : 4, right: i == 2 ? 0 : 4),
+                      child: ShimmerCard(colors: colors, height: 76, child: const SizedBox()),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 28),
+              ShimmerBlock(height: 16, width: 90, color: colors.border),
+              const SizedBox(height: 10),
+              ShimmerCard(colors: colors, height: 160, child: const SizedBox()),
+              const SizedBox(height: 24),
+              ShimmerBlock(height: 11, width: 130, color: colors.border),
+              const SizedBox(height: 8),
+              ShimmerCard(colors: colors, height: 110, child: const SizedBox()),
+              const SizedBox(height: 20),
+              ShimmerBlock(height: 11, width: 150, color: colors.border),
+              const SizedBox(height: 8),
+              ShimmerCard(colors: colors, height: 90, child: const SizedBox()),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ─── Section label ────────────────────────────────────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
@@ -371,10 +426,12 @@ class _MonthlyContributionGrid extends ConsumerStatefulWidget {
     required this.isDark,
     required this.textPrimary,
     required this.textMuted,
+    required this.isPro,
   });
 
   final Habit habit;
   final List<HabitDayStatus> days;
+  final bool isPro;
   final Color accentColor;
   final Color surface;
   final Color border;
@@ -494,6 +551,31 @@ class _MonthlyContributionGridState
         );
   }
 
+  /// Same free-tier backfill window as [HabitDetailScreen._logPastDay] —
+  /// today and the last 7 days are always toggleable; anything older needs
+  /// Pro. This grid used to let a tap on *any* past cell (in *any* month
+  /// the pager could reach, with no bound of its own) toggle it directly,
+  /// which bypassed that limit entirely regardless of what the "Log a
+  /// past day" button enforced.
+  bool _isDateLocked(DateTime date) {
+    if (widget.isPro) return false;
+    final today = DateTime.now();
+    final oldestFreeDate = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 7));
+    return date.isBefore(oldestFreeDate);
+  }
+
+  Future<void> _handleDayTap(DateTime date, DayStatus? currentStatus) async {
+    if (_isDateLocked(date)) {
+      await navigateToPaywall(context, ref);
+      return;
+    }
+    await _toggleDay(date, currentStatus);
+  }
+
   Widget _buildMonthGrid(int pageIndex) {
     final monthDate = _monthForIndex(pageIndex);
     final year = monthDate.year;
@@ -570,7 +652,7 @@ class _MonthlyContributionGridState
                     gap: cellGap,
                     onTap: isFuture
                         ? null
-                        : () => _toggleDay(date, dayStatus?.status),
+                        : () => _handleDayTap(date, dayStatus?.status),
                   );
                 }),
               );

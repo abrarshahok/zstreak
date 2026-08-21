@@ -13,6 +13,7 @@ const _kAge = 'profile_age';
 const _kGender = 'profile_gender';
 // goals stored as comma-separated string, e.g. "Build healthy habits,Stay consistent"
 const _kGoals = 'profile_goals';
+const _kPhotoUrl = 'profile_photo_url';
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ class UserProfile {
     this.age = '',
     this.gender = '',
     this.goals = const [],
+    this.photoUrl,
   });
 
   final String name;
@@ -31,17 +33,23 @@ class UserProfile {
   /// Selected goals — can be multiple.
   final List<String> goals;
 
+  /// Google account profile photo URL, captured at sign-in/link time.
+  /// Null for guests and for accounts that haven't signed in with Google.
+  final String? photoUrl;
+
   UserProfile copyWith({
     String? name,
     String? age,
     String? gender,
     List<String>? goals,
+    String? photoUrl,
   }) {
     return UserProfile(
       name: name ?? this.name,
       age: age ?? this.age,
       gender: gender ?? this.gender,
       goals: goals ?? this.goals,
+      photoUrl: photoUrl ?? this.photoUrl,
     );
   }
 
@@ -65,6 +73,7 @@ class UserProfile {
     'age': age,
     'gender': gender,
     'goals': goals,
+    'photoUrl': photoUrl,
     'updatedAt': FieldValue.serverTimestamp(),
   };
 
@@ -88,6 +97,7 @@ class UserProfile {
       age: (data['age'] as String?) ?? '',
       gender: (data['gender'] as String?) ?? '',
       goals: List.unmodifiable(goals),
+      photoUrl: data['photoUrl'] as String?,
     );
   }
 }
@@ -137,6 +147,9 @@ class UserProfileNotifier extends Notifier<UserProfile> {
       await _prefs.setString(_kAge, remote.age);
       await _prefs.setString(_kGender, remote.gender);
       await _prefs.setString(_kGoals, remote.goals.join(','));
+      if (remote.photoUrl != null) {
+        await _prefs.setString(_kPhotoUrl, remote.photoUrl!);
+      }
       state = remote;
     } catch (e) {
       debugPrint('[UserProfile] syncFromFirestore failed: $e');
@@ -170,6 +183,17 @@ class UserProfileNotifier extends Notifier<UserProfile> {
     if (uid != null) unawaited(pushToFirestore(uid));
   }
 
+  /// Captures the Google account's profile photo URL. Called from
+  /// [app.dart]'s auth listener on every non-anonymous sign-in so it stays
+  /// in sync with whatever Firebase Auth currently reports — not part of
+  /// the onboarding questionnaire, since guests never have one.
+  Future<void> setPhotoUrl(String? v, {String? uid}) async {
+    if (v == null || v.isEmpty) return;
+    await _prefs.setString(_kPhotoUrl, v);
+    state = state.copyWith(photoUrl: v);
+    if (uid != null) unawaited(pushToFirestore(uid));
+  }
+
   /// Toggle a single goal in/out of the list.
   Future<void> toggleGoal(String goal, {String? uid}) async {
     final current = List<String>.from(state.goals);
@@ -186,6 +210,7 @@ class UserProfileNotifier extends Notifier<UserProfile> {
     await _prefs.remove(_kAge);
     await _prefs.remove(_kGender);
     await _prefs.remove(_kGoals);
+    await _prefs.remove(_kPhotoUrl);
     state = const UserProfile();
   }
 }
@@ -206,6 +231,7 @@ UserProfile _fromPrefs(SharedPreferences prefs) {
     age: prefs.getString(_kAge) ?? '',
     gender: prefs.getString(_kGender) ?? '',
     goals: List.unmodifiable(goals),
+    photoUrl: prefs.getString(_kPhotoUrl),
   );
 }
 

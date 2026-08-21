@@ -12,6 +12,7 @@ import '../../onboarding/presentation/onboarding_screen.dart';
 import '../../onboarding/presentation/post_auth_onboarding_flow.dart';
 import '../../onboarding/presentation/user_profile_questions_screen.dart';
 import '../application/auth_providers.dart';
+import 'account_status_gate.dart';
 import 'signed_in_home_gate.dart';
 
 /// Root router: branches purely on [AuthStage] so no other widget needs
@@ -81,7 +82,10 @@ class AuthGate extends ConsumerWidget {
         return switch (stage) {
           AuthStage.noAuthYet => const OnboardingScreen(),
           AuthStage.guest => const GuestHomeGate(),
-          AuthStage.signedIn => const SignedInHomeGate(),
+          // AccountStatusGate intercepts a deactivated/restricted account
+          // before SignedInHomeGate ever mounts and tries to load habits
+          // Firestore's own rules would now deny anyway.
+          AuthStage.signedIn => const AccountStatusGate(child: SignedInHomeGate()),
         };
       },
     );

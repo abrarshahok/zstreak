@@ -7,6 +7,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
@@ -161,9 +162,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
         ),
       ),
       body: offeringsAsync.when(
-        loading: () => Center(
-          child: CircularProgressIndicator(color: accent, strokeWidth: 2),
-        ),
+        loading: () => _PaywallSkeleton(isDark: isDark),
         error: (_, _) => _ErrorBody(
           accent: accent,
           textMuted: textMuted,
@@ -288,6 +287,54 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
+//
+// Mirrors the real page's section order (hero, comparison table,
+// testimonials, package cards, guarantee badge) as generic placeholder
+// blocks — RevenueCat's offerings fetch is the only thing gating this, and
+// it's usually near-instant, but a shimmer that matches the eventual
+// layout avoids a jarring re-layout jump when it resolves.
+class _PaywallSkeleton extends StatelessWidget {
+  const _PaywallSkeleton({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+          children: [
+            ShimmerCircle(size: 64, color: colors.border),
+            const SizedBox(height: 20),
+            ShimmerBlock(height: 22, width: double.infinity, color: colors.border),
+            const SizedBox(height: 10),
+            ShimmerBlock(height: 14, width: 220, color: colors.border),
+            const SizedBox(height: 28),
+            ShimmerCard(colors: colors, height: 140, child: const SizedBox()),
+            const SizedBox(height: 24),
+            ShimmerCard(colors: colors, height: 90, child: const SizedBox()),
+            const SizedBox(height: 24),
+            Row(
+              children: List.generate(2, (i) {
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(left: i == 0 ? 0 : 6, right: i == 1 ? 0 : 6),
+                    child: ShimmerCard(colors: colors, height: 110, child: const SizedBox()),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+            ShimmerBlock(height: 40, width: double.infinity, radius: 10, color: colors.shimmer),
+          ],
+        );
+      },
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
+import '../../../core/widgets/shimmer_loading.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -59,9 +60,7 @@ class ArchivedHabitsScreen extends ConsumerWidget {
         ),
       ),
       body: archived.when(
-        loading: () => Center(
-          child: CircularProgressIndicator(color: accent, strokeWidth: 2),
-        ),
+        loading: () => _ArchivedListSkeleton(isDark: isDark),
         error: (error, _) => Center(
           child: Text('$error', style: TextStyle(color: textMuted)),
         ),
@@ -91,6 +90,52 @@ class ArchivedHabitsScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ── Loading skeleton ─────────────────────────────────────────────────────────
+
+class _ArchivedListSkeleton extends StatelessWidget {
+  const _ArchivedListSkeleton({required this.isDark});
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
+          itemCount: 4,
+          itemBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ShimmerCard(
+              colors: colors,
+              radius: 16,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  ShimmerBlock(width: 48, height: 48, radius: 14, color: colors.border),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ShimmerBlock(height: 14, width: 120, color: colors.border),
+                        const SizedBox(height: 8),
+                        ShimmerBlock(height: 11, width: 90, color: colors.border),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ShimmerBlock(height: 30, width: 70, radius: 10, color: colors.border),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

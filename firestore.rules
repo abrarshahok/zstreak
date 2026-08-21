@@ -11,19 +11,64 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
+    // A deactivated ('inactive') or admin-'restrict'-ed account's habit
+    // data must be genuinely inaccessible, not just hidden by the app's
+    // own UI — enforced here, not just client-side, since a client check
+    // is a suggestion and a security rule is the actual guarantee.
+    //
+    // The exists() check is not optional: almost no account has ever had
+    // /users/{uid} itself actually written — nothing touched that parent
+    // doc directly until AccountStatusRepository, which only runs on
+    // deactivate/reactivate. get(...).data on a document that was never
+    // created evaluates to null, not an empty map, so calling .get() on
+    // it is a runtime rule error — and Firestore rules fail CLOSED on any
+    // runtime error. Without this check, that one omission denied every
+    // read and write to profile/habits/check_ins for every account that
+    // had simply never deactivated, not just the ones that had.
+    function isActive(uid) {
+      return !exists(/databases/$(database)/documents/users/$(uid))
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('status', 'active') == 'active';
+    }
+
+    // A self-reactivate write (flipping status back to 'active') is only
+    // honored within the 30-day window recorded at deactivation time, and
+    // never at all once the stored status is 'restrict' — an admin action,
+    // not something a client write should ever undo. Checked against
+    // request.time (the server's clock at the moment of this write), so
+    // there's no separate scheduled job needed to "close" the window —
+    // it's closed the instant the deadline passes, enforced right here.
+    function canSelfReactivate(uid) {
+      let doc = get(/databases/$(database)/documents/users/$(uid)).data;
+      return doc.get('status', 'active') != 'restrict'
+        && (doc.get('reactivationDeadline', null) == null
+            || request.time < doc.reactivationDeadline);
+    }
+
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      // Deliberately not gated by isActive() — the account doc is where
+      // status itself lives, and the owner must always be able to read
+      // it (to know they're deactivated) and, within limits, write it.
+      allow read: if isOwner(uid);
+      // A brand-new doc can't already have an expired deadline, so create
+      // is unconditional for the owner.
+      allow create: if isOwner(uid);
+      // Any update that does NOT set status to 'active' is unrestricted
+      // (deactivating is always allowed instantly) — only the specific
+      // "become active again" transition is gated.
+      allow update: if isOwner(uid)
+        && (request.resource.data.get('status', 'active') != 'active'
+            || canSelfReactivate(uid));
 
       // Profile data collected during onboarding (name, age, gender, goals).
       match /profile/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read, write: if isOwner(uid) && isActive(uid);
       }
 
       match /habits/{habitId} {
-        allow read, write: if isOwner(uid);
+        allow read, write: if isOwner(uid) && isActive(uid);
 
         match /check_ins/{date} {
-          allow read, write: if isOwner(uid);
+          allow read, write: if isOwner(uid) && isActive(uid);
         }
       }
     }

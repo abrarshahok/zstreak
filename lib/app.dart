@@ -5,6 +5,7 @@ import 'package:home_widget/home_widget.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_providers.dart';
 import 'features/analytics/analytics_service.dart';
+import 'features/auth/application/account_status_providers.dart';
 import 'features/auth/application/auth_providers.dart';
 import 'features/auth/presentation/auth_gate.dart';
 import 'features/habits/application/habit_providers.dart';
@@ -104,8 +105,26 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
         service.logIn(uid);
         // Sync user profile from Firestore when a non-anonymous user signs in.
         // This restores name/age/gender/goals on a new device or after reinstall.
+        //
+        // Checked against the account's *current* status first — a
+        // deactivated/restricted account's profile doc is correctly
+        // denied by Firestore's own rules, so attempting this sync
+        // unconditionally just produced a guaranteed, noisy
+        // permission-denied on every sign-in while inactive.
+        // [AccountStatusGate] is what actually handles the UI for that
+        // account state; this just avoids a doomed network call ahead of it.
         if (user?.isAnonymous == false) {
-          ref.read(userProfileProvider.notifier).syncFromFirestore(uid);
+          ref.read(accountStatusRepositoryProvider).getStatus(uid).then((status) {
+            if (!status.isActive) return;
+            final profileNotifier = ref.read(userProfileProvider.notifier);
+            profileNotifier.syncFromFirestore(uid).then((_) {
+              // Google's photo isn't part of the onboarding questionnaire, so
+              // it's kept separately in sync with whatever Firebase Auth
+              // currently reports — after the Firestore sync above, so an
+              // older remote profile with no photoUrl never clobbers it.
+              profileNotifier.setPhotoUrl(user?.photoURL, uid: uid);
+            });
+          });
         }
       } else {
         service.logOut();
