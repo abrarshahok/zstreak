@@ -14,15 +14,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
       if (from < 2) {
-        // Schema v2: streak freeze columns (now unused but kept for
-        // backward-compat so existing installs don't crash on upgrade).
+        // Schema v2: streak freeze columns — added for a feature that was
+        // never built out; dropped again in the v4 migration below.
         await customStatement(
           'ALTER TABLE habits ADD COLUMN streak_freezes INTEGER NOT NULL DEFAULT 1',
         );
@@ -37,6 +37,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         // Schema v3: optional habit description.
         await customStatement('ALTER TABLE habits ADD COLUMN description TEXT');
+      }
+      if (from < 4) {
+        // Schema v4: drop the streak-freeze columns added in v2 — no
+        // repository, provider, or screen ever read or wrote either one;
+        // the feature was abandoned mid-build. Requires SQLite 3.35+
+        // (bundled by sqlite3_flutter_libs), which supports DROP COLUMN.
+        await customStatement('ALTER TABLE habits DROP COLUMN streak_freezes');
+        await customStatement('ALTER TABLE habits DROP COLUMN frozen_dates');
       }
     },
   );

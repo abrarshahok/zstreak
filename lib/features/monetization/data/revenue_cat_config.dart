@@ -22,8 +22,17 @@ class RevenueCatConfig {
   RevenueCatConfig._();
 
   /// RevenueCat Android Public SDK key.
-  /// Current value: test key — swap for the production key before shipping.
-  static const String androidApiKey = 'goog_RUwHehSsFrCVtXKxPdSeIpoLSAT';
+  ///
+  /// Reads from a `--dart-define=REVENUECAT_ANDROID_API_KEY=...` build
+  /// argument when one is supplied, falling back to the checked-in test
+  /// key for local development. This exists so a release build pipeline
+  /// can inject the real key without anyone having to remember to hand-edit
+  /// this file — the previous hardcoded-with-a-comment version relied on
+  /// that manual step happening before every release.
+  static const String androidApiKey = String.fromEnvironment(
+    'REVENUECAT_ANDROID_API_KEY',
+    defaultValue: 'goog_RUwHehSsFrCVtXKxPdSeIpoLSAT', // test key — dev default only
+  );
 
   /// Must match the Entitlement identifier in your RevenueCat dashboard.
   static const String premiumEntitlementId = 'premium';

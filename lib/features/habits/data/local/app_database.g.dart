@@ -147,29 +147,6 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _streakFreezesMeta = const VerificationMeta(
-    'streakFreezes',
-  );
-  @override
-  late final GeneratedColumn<int> streakFreezes = GeneratedColumn<int>(
-    'streak_freezes',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(1),
-  );
-  static const VerificationMeta _frozenDatesMeta = const VerificationMeta(
-    'frozenDates',
-  );
-  @override
-  late final GeneratedColumn<String> frozenDates = GeneratedColumn<String>(
-    'frozen_dates',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -197,8 +174,6 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
     createdAt,
     archivedAt,
     updatedAt,
-    streakFreezes,
-    frozenDates,
     sortOrder,
   ];
   @override
@@ -322,24 +297,6 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
-    if (data.containsKey('streak_freezes')) {
-      context.handle(
-        _streakFreezesMeta,
-        streakFreezes.isAcceptableOrUnknown(
-          data['streak_freezes']!,
-          _streakFreezesMeta,
-        ),
-      );
-    }
-    if (data.containsKey('frozen_dates')) {
-      context.handle(
-        _frozenDatesMeta,
-        frozenDates.isAcceptableOrUnknown(
-          data['frozen_dates']!,
-          _frozenDatesMeta,
-        ),
-      );
-    }
     if (data.containsKey('sort_order')) {
       context.handle(
         _sortOrderMeta,
@@ -407,14 +364,6 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, HabitRow> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
-      streakFreezes: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}streak_freezes'],
-      )!,
-      frozenDates: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}frozen_dates'],
-      ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -445,14 +394,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
   final DateTime? archivedAt;
   final DateTime updatedAt;
 
-  /// Feature 1 – Streak Freeze: number of available freeze tokens.
-  /// Defaults to 1 so new habits start with one free freeze.
-  final int streakFreezes;
-
-  /// Feature 1 – Streak Freeze: JSON-encoded list of "YYYY-MM-DD" strings
-  /// for days that were frozen (missed but protected from streak reset).
-  final String? frozenDates;
-
   /// Feature 6 – Drag-to-reorder: lower values appear first in the list.
   final int sortOrder;
   const HabitRow({
@@ -469,8 +410,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     required this.createdAt,
     this.archivedAt,
     required this.updatedAt,
-    required this.streakFreezes,
-    this.frozenDates,
     required this.sortOrder,
   });
   @override
@@ -495,10 +434,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       map['archived_at'] = Variable<DateTime>(archivedAt);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
-    map['streak_freezes'] = Variable<int>(streakFreezes);
-    if (!nullToAbsent || frozenDates != null) {
-      map['frozen_dates'] = Variable<String>(frozenDates);
-    }
     map['sort_order'] = Variable<int>(sortOrder);
     return map;
   }
@@ -524,10 +459,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           ? const Value.absent()
           : Value(archivedAt),
       updatedAt: Value(updatedAt),
-      streakFreezes: Value(streakFreezes),
-      frozenDates: frozenDates == null && nullToAbsent
-          ? const Value.absent()
-          : Value(frozenDates),
       sortOrder: Value(sortOrder),
     );
   }
@@ -551,8 +482,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-      streakFreezes: serializer.fromJson<int>(json['streakFreezes']),
-      frozenDates: serializer.fromJson<String?>(json['frozenDates']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
     );
   }
@@ -573,8 +502,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
-      'streakFreezes': serializer.toJson<int>(streakFreezes),
-      'frozenDates': serializer.toJson<String?>(frozenDates),
       'sortOrder': serializer.toJson<int>(sortOrder),
     };
   }
@@ -593,8 +520,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     DateTime? createdAt,
     Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? updatedAt,
-    int? streakFreezes,
-    Value<String?> frozenDates = const Value.absent(),
     int? sortOrder,
   }) => HabitRow(
     id: id ?? this.id,
@@ -610,8 +535,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     createdAt: createdAt ?? this.createdAt,
     archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     updatedAt: updatedAt ?? this.updatedAt,
-    streakFreezes: streakFreezes ?? this.streakFreezes,
-    frozenDates: frozenDates.present ? frozenDates.value : this.frozenDates,
     sortOrder: sortOrder ?? this.sortOrder,
   );
   HabitRow copyWithCompanion(HabitsCompanion data) {
@@ -643,12 +566,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           ? data.archivedAt.value
           : this.archivedAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      streakFreezes: data.streakFreezes.present
-          ? data.streakFreezes.value
-          : this.streakFreezes,
-      frozenDates: data.frozenDates.present
-          ? data.frozenDates.value
-          : this.frozenDates,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
     );
   }
@@ -669,8 +586,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           ..write('createdAt: $createdAt, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('streakFreezes: $streakFreezes, ')
-          ..write('frozenDates: $frozenDates, ')
           ..write('sortOrder: $sortOrder')
           ..write(')'))
         .toString();
@@ -691,8 +606,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
     createdAt,
     archivedAt,
     updatedAt,
-    streakFreezes,
-    frozenDates,
     sortOrder,
   );
   @override
@@ -712,8 +625,6 @@ class HabitRow extends DataClass implements Insertable<HabitRow> {
           other.createdAt == this.createdAt &&
           other.archivedAt == this.archivedAt &&
           other.updatedAt == this.updatedAt &&
-          other.streakFreezes == this.streakFreezes &&
-          other.frozenDates == this.frozenDates &&
           other.sortOrder == this.sortOrder);
 }
 
@@ -731,8 +642,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> archivedAt;
   final Value<DateTime> updatedAt;
-  final Value<int> streakFreezes;
-  final Value<String?> frozenDates;
   final Value<int> sortOrder;
   final Value<int> rowid;
   const HabitsCompanion({
@@ -749,8 +658,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     this.createdAt = const Value.absent(),
     this.archivedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
-    this.streakFreezes = const Value.absent(),
-    this.frozenDates = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -768,8 +675,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     required DateTime createdAt,
     this.archivedAt = const Value.absent(),
     required DateTime updatedAt,
-    this.streakFreezes = const Value.absent(),
-    this.frozenDates = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -794,8 +699,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? archivedAt,
     Expression<DateTime>? updatedAt,
-    Expression<int>? streakFreezes,
-    Expression<String>? frozenDates,
     Expression<int>? sortOrder,
     Expression<int>? rowid,
   }) {
@@ -813,8 +716,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (archivedAt != null) 'archived_at': archivedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
-      if (streakFreezes != null) 'streak_freezes': streakFreezes,
-      if (frozenDates != null) 'frozen_dates': frozenDates,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (rowid != null) 'rowid': rowid,
     });
@@ -834,8 +735,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? archivedAt,
     Value<DateTime>? updatedAt,
-    Value<int>? streakFreezes,
-    Value<String?>? frozenDates,
     Value<int>? sortOrder,
     Value<int>? rowid,
   }) {
@@ -853,8 +752,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
       createdAt: createdAt ?? this.createdAt,
       archivedAt: archivedAt ?? this.archivedAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      streakFreezes: streakFreezes ?? this.streakFreezes,
-      frozenDates: frozenDates ?? this.frozenDates,
       sortOrder: sortOrder ?? this.sortOrder,
       rowid: rowid ?? this.rowid,
     );
@@ -902,12 +799,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
-    if (streakFreezes.present) {
-      map['streak_freezes'] = Variable<int>(streakFreezes.value);
-    }
-    if (frozenDates.present) {
-      map['frozen_dates'] = Variable<String>(frozenDates.value);
-    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
@@ -933,8 +824,6 @@ class HabitsCompanion extends UpdateCompanion<HabitRow> {
           ..write('createdAt: $createdAt, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('streakFreezes: $streakFreezes, ')
-          ..write('frozenDates: $frozenDates, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1768,8 +1657,6 @@ typedef $$HabitsTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> archivedAt,
       required DateTime updatedAt,
-      Value<int> streakFreezes,
-      Value<String?> frozenDates,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -1788,8 +1675,6 @@ typedef $$HabitsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> archivedAt,
       Value<DateTime> updatedAt,
-      Value<int> streakFreezes,
-      Value<String?> frozenDates,
       Value<int> sortOrder,
       Value<int> rowid,
     });
@@ -1888,16 +1773,6 @@ class $$HabitsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get streakFreezes => $composableBuilder(
-    column: $table.streakFreezes,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get frozenDates => $composableBuilder(
-    column: $table.frozenDates,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2006,16 +1881,6 @@ class $$HabitsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get streakFreezes => $composableBuilder(
-    column: $table.streakFreezes,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get frozenDates => $composableBuilder(
-    column: $table.frozenDates,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -2083,16 +1948,6 @@ class $$HabitsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  GeneratedColumn<int> get streakFreezes => $composableBuilder(
-    column: $table.streakFreezes,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get frozenDates => $composableBuilder(
-    column: $table.frozenDates,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
@@ -2164,8 +2019,6 @@ class $$HabitsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
-                Value<int> streakFreezes = const Value.absent(),
-                Value<String?> frozenDates = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HabitsCompanion(
@@ -2182,8 +2035,6 @@ class $$HabitsTableTableManager
                 createdAt: createdAt,
                 archivedAt: archivedAt,
                 updatedAt: updatedAt,
-                streakFreezes: streakFreezes,
-                frozenDates: frozenDates,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),
@@ -2202,8 +2053,6 @@ class $$HabitsTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime updatedAt,
-                Value<int> streakFreezes = const Value.absent(),
-                Value<String?> frozenDates = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HabitsCompanion.insert(
@@ -2220,8 +2069,6 @@ class $$HabitsTableTableManager
                 createdAt: createdAt,
                 archivedAt: archivedAt,
                 updatedAt: updatedAt,
-                streakFreezes: streakFreezes,
-                frozenDates: frozenDates,
                 sortOrder: sortOrder,
                 rowid: rowid,
               ),

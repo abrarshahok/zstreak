@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
@@ -10,13 +9,12 @@ import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
-import '../../analytics/analytics_service.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
-import '../../reviews/review_prompt_service.dart';
 import '../../settings/presentation/settings_screen.dart';
+import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
@@ -26,9 +24,7 @@ import 'archived_habits_screen.dart';
 import 'edit_habit_screen.dart';
 import 'habit_detail_screen.dart';
 import 'habit_templates_screen.dart';
-import '../../notifications/application/notification_providers.dart';
 import 'habit_tile.dart';
-import 'milestone_overlay.dart';
 import 'weekly_review_card.dart';
 
 // ─── View mode provider ───────────────────────────────────────────────────────
@@ -798,49 +794,13 @@ class HabitGridCard extends ConsumerWidget {
     WidgetRef ref,
     String today,
     bool isDone,
-  ) async {
-    if (isDone) {
-      HapticFeedback.lightImpact();
-      await ref
-          .read(habitRepositoryProvider)
-          .setCheckIn(habitId: habit.id, date: today, completed: false);
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    await ref
-        .read(habitRepositoryProvider)
-        .setCheckIn(habitId: habit.id, date: today, completed: true);
-
-    final updated = await ref
-        .read(habitRepositoryProvider)
-        .getHabitById(habit.id);
-    if (updated != null) {
-      await ref
-          .read(reviewPromptServiceProvider)
-          .maybePromptAfterStreakMilestone(updated.currentStreak);
-      await ref
-          .read(analyticsServiceProvider)
-          .logStreakMilestone(habitId: habit.id, streak: updated.currentStreak);
-      await ref
-          .read(notificationOrchestratorProvider)
-          .onCheckIn(
-            habitId: habit.id,
-            habitName: habit.name,
-            habitEmoji: habit.emoji,
-            newStreak: updated.currentStreak,
-          );
-
-      if (context.mounted) {
-        await maybeShowMilestoneOverlay(
-          context: context,
-          ref: ref,
-          habit: updated,
-          streak: updated.currentStreak,
-        );
-      }
-    }
-  }
+  ) => performCheckIn(
+    context: context,
+    ref: ref,
+    habit: habit,
+    date: today,
+    isDone: isDone,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

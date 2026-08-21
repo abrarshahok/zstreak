@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/local_date.dart';
 import '../../habits/application/habit_providers.dart';
+import '../../habits/domain/check_in.dart';
 import '../../habits/domain/frequency.dart';
 import '../../habits/domain/habit.dart';
 import '../../monetization/application/entitlement_providers.dart';
@@ -35,20 +36,32 @@ class NotificationOrchestrator {
   final Ref _ref;
 
   /// Call once after [NotificationService.initialize] on app start.
+  ///
+  /// Fetches each habit's check-in history exactly once and reuses it for
+  /// both the streak-at-risk check and the weekly summary — previously
+  /// these ran as separate queries per habit (streak-at-risk) plus a
+  /// nested per-day-of-week query per habit (weekly summary), for up to
+  /// `habits + habits * 7` reads on every cold start.
   Future<void> refresh() async {
-    final habits = await _ref
-        .read(habitRepositoryProvider)
-        .watchActiveHabits()
-        .first;
+    final repo = _ref.read(habitRepositoryProvider);
+    final habits = await repo.watchActiveHabits().first;
 
-    await _refreshStreakAtRisk(habits);
-    await _refreshWeeklySummary(habits);
+    final checkInsByHabit = <String, List<CheckIn>>{};
+    for (final habit in habits) {
+      checkInsByHabit[habit.id] = await repo.watchHabitCheckIns(habit.id).first;
+    }
+
+    await _refreshStreakAtRisk(habits, checkInsByHabit);
+    await _refreshWeeklySummary(habits, checkInsByHabit);
     await _refreshProUpsell();
   }
 
   // ─── Streak-at-risk ────────────────────────────────────────────────────────
 
-  Future<void> _refreshStreakAtRisk(List<Habit> habits) async {
+  Future<void> _refreshStreakAtRisk(
+    List<Habit> habits,
+    Map<String, List<CheckIn>> checkInsByHabit,
+  ) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final todayStr = localDateString(today);
@@ -71,13 +84,10 @@ class NotificationOrchestrator {
         continue;
       }
 
-      // Check if already checked in today.
-      final checkIn = await _ref
-          .read(habitRepositoryProvider)
-          .watchCheckIn(habitId: habit.id, date: todayStr)
-          .first;
+      final checkedInToday = (checkInsByHabit[habit.id] ?? const [])
+          .any((c) => c.date == todayStr && c.completed);
 
-      if (checkIn?.completed == true) {
+      if (checkedInToday) {
         // Already done — cancel any pending risk alert.
         await _notifications.cancelStreakAtRisk(habit.id);
         continue;
@@ -108,7 +118,10 @@ class NotificationOrchestrator {
 
   // ─── Weekly summary ────────────────────────────────────────────────────────
 
-  Future<void> _refreshWeeklySummary(List<Habit> habits) async {
+  Future<void> _refreshWeeklySummary(
+    List<Habit> habits,
+    Map<String, List<CheckIn>> checkInsByHabit,
+  ) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final weekStart = today.subtract(Duration(days: today.weekday - 1));
@@ -117,17 +130,17 @@ class NotificationOrchestrator {
     var completed = 0;
 
     for (final habit in habits) {
+      final completedDates = (checkInsByHabit[habit.id] ?? const [])
+          .where((c) => c.completed)
+          .map((c) => c.date)
+          .toSet();
+
       // Count scheduled days this week up to today.
       for (var d = 0; d <= today.weekday - 1; d++) {
         final day = weekStart.add(Duration(days: d));
         if (!_isScheduledToday(habit, day)) continue;
         totalDue++;
-        final dateStr = localDateString(day);
-        final checkIn = await _ref
-            .read(habitRepositoryProvider)
-            .watchCheckIn(habitId: habit.id, date: dateStr)
-            .first;
-        if (checkIn?.completed == true) completed++;
+        if (completedDates.contains(localDateString(day))) completed++;
       }
     }
 

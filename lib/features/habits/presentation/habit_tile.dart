@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
-import '../../analytics/analytics_service.dart';
-import '../../notifications/application/notification_providers.dart';
-import '../../reviews/review_prompt_service.dart';
+import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
 import '../domain/streak_calculator.dart';
 import 'habit_detail_screen.dart';
-import 'milestone_overlay.dart';
 
 /// Minimal flat habit tile.
 /// Flat card with thin border, no gradients, no glow.
@@ -31,51 +27,13 @@ class HabitTile extends ConsumerWidget {
     WidgetRef ref,
     String today,
     bool isDone,
-  ) async {
-    if (isDone) {
-      HapticFeedback.lightImpact();
-      await ref
-          .read(habitRepositoryProvider)
-          .setCheckIn(habitId: habit.id, date: today, completed: false);
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    await ref
-        .read(habitRepositoryProvider)
-        .setCheckIn(habitId: habit.id, date: today, completed: true);
-
-    final updated = await ref
-        .read(habitRepositoryProvider)
-        .getHabitById(habit.id);
-    if (updated != null) {
-      await ref
-          .read(reviewPromptServiceProvider)
-          .maybePromptAfterStreakMilestone(updated.currentStreak);
-      await ref
-          .read(analyticsServiceProvider)
-          .logStreakMilestone(habitId: habit.id, streak: updated.currentStreak);
-
-      // Fire milestone notification + cancel streak-at-risk alert.
-      await ref
-          .read(notificationOrchestratorProvider)
-          .onCheckIn(
-            habitId: habit.id,
-            habitName: habit.name,
-            habitEmoji: habit.emoji,
-            newStreak: updated.currentStreak,
-          );
-
-      if (context.mounted) {
-        await maybeShowMilestoneOverlay(
-          context: context,
-          ref: ref,
-          habit: updated,
-          streak: updated.currentStreak,
-        );
-      }
-    }
-  }
+  ) => performCheckIn(
+    context: context,
+    ref: ref,
+    habit: habit,
+    date: today,
+    isDone: isDone,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

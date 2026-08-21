@@ -74,7 +74,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       reminderTime: reminderTime,
       description: description,
     );
-    await _syncAll();
+    await _syncHabit(habit.id);
     return habit;
   }
 
@@ -91,7 +91,7 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       completed: completed,
       note: note,
     );
-    await _syncAll();
+    await _syncHabit(habitId);
   }
 
   @override
@@ -115,40 +115,44 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       reminderTime: reminderTime,
       description: description,
     );
-    await _syncAll();
+    await _syncHabit(id);
   }
 
   @override
   Future<void> archiveHabit(String id) async {
     await _inner.archiveHabit(id);
-    await _syncAll();
+    await _syncHabit(id);
   }
 
   @override
   Future<void> unarchiveHabit(String id) async {
     await _inner.unarchiveHabit(id);
-    await _syncAll();
+    await _syncHabit(id);
   }
 
   @override
   Future<void> deleteHabit(String id) async {
     await _inner.deleteHabit(id);
-    await _syncAll();
+    await _widgetSync.removeHabitData(id);
   }
 
   @override
   Future<void> reorderHabits(List<String> orderedIds) async {
     await _inner.reorderHabits(orderedIds);
-    // No widget sync needed for reorder — widget shows top habit only.
+    // No widget sync needed for reorder — sortOrder isn't part of what any
+    // single widget instance displays (each instance shows one configured
+    // habit's own name/emoji/color/streak/completedToday).
   }
 
-  Future<void> _syncAll() async {
-    final habits = await _inner.watchActiveHabits().first;
+  /// Syncs exactly the one habit that changed — O(1) in total habit count,
+  /// unlike re-fetching and rewriting every active habit on every mutation.
+  Future<void> _syncHabit(String habitId) async {
+    final habit = await _inner.getHabitById(habitId);
+    if (habit == null) return; // deleted mid-flight; nothing to sync
     final isPremium = await _entitlements.hasActiveEntitlement();
-    await _widgetSync.syncHabits(
-      habits,
-      (habitId, date) =>
-          _inner.watchCheckIn(habitId: habitId, date: date).first,
+    await _widgetSync.syncSingleHabit(
+      habit,
+      (id, date) => _inner.watchCheckIn(habitId: id, date: date).first,
       isPremium: isPremium,
     );
   }

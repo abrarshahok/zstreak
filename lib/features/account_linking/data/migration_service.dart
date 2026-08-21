@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/config/app_config.dart';
 import '../../guest/data/guest_meta_repository.dart';
 import '../../habits/data/local/app_database.dart';
+import '../../habits/data/remote/habit_firestore_codec.dart';
+import '../../habits/domain/frequency.dart';
 
 class MigrationOutcome {
   const MigrationOutcome({required this.totalHabits, required this.archivedDueToLimit});
@@ -49,6 +51,23 @@ class MigrationService {
     final habitRows = await _db.select(_db.habits).get();
     var archivedDueToLimit = 0;
 
+    // Batched in groups of 400 (Firestore's per-commit limit is 500) so a
+    // guest with years of daily check-ins migrates in a handful of
+    // round-trips instead of one sequential await per habit *and* per
+    // check-in — the previous version could mean 700+ network round-trips
+    // for a two-year streak, right at the moment linking needs to be fast
+    // and reliable.
+    const batchSize = 400;
+    var batch = _firestore.batch();
+    var pending = 0;
+
+    Future<void> flushIfFull() async {
+      if (pending < batchSize) return;
+      await batch.commit();
+      batch = _firestore.batch();
+      pending = 0;
+    }
+
     for (final habit in habitRows) {
       var archivedAt = habit.archivedAt;
       final wasAlreadyArchived = archivedAt != null;
@@ -61,31 +80,46 @@ class MigrationService {
         }
       }
 
-      await habitsCollection.doc(habit.id).set({
-        'name': habit.name,
-        'emoji': habit.emoji,
-        'colorHex': habit.colorHex,
-        'frequencyType': habit.frequencyType,
-        'frequencyConfig': jsonDecode(habit.frequencyConfig),
-        'reminderTime': habit.reminderTime,
-        'currentStreak': habit.currentStreak,
-        'longestStreak': habit.longestStreak,
-        'createdAt': Timestamp.fromDate(habit.createdAt),
-        'archivedAt': archivedAt == null ? null : Timestamp.fromDate(archivedAt),
-        'updatedAt': Timestamp.now(),
-      });
+      final frequencyType = FrequencyType.fromDbValue(habit.frequencyType);
+      final habitDoc = habitsCollection.doc(habit.id);
+      batch.set(
+        habitDoc,
+        HabitFirestoreCodec.forMigration(
+          name: habit.name,
+          emoji: habit.emoji,
+          colorHex: habit.colorHex,
+          frequencyType: frequencyType,
+          frequencyConfig: FrequencyConfig.fromJson(
+            frequencyType,
+            jsonDecode(habit.frequencyConfig) as Map<String, dynamic>,
+          ),
+          reminderTime: habit.reminderTime,
+          description: habit.description,
+          currentStreak: habit.currentStreak,
+          longestStreak: habit.longestStreak,
+          createdAt: habit.createdAt,
+          archivedAt: archivedAt,
+          sortOrder: habit.sortOrder,
+        ),
+      );
+      pending++;
+      await flushIfFull();
 
       final checkIns = await (_db.select(
         _db.checkIns,
       )..where((c) => c.habitId.equals(habit.id))).get();
       for (final checkIn in checkIns) {
-        await habitsCollection.doc(habit.id).collection('check_ins').doc(checkIn.date).set({
+        batch.set(habitDoc.collection('check_ins').doc(checkIn.date), {
           'completed': checkIn.completed,
           'note': checkIn.note,
           'loggedAt': Timestamp.fromDate(checkIn.loggedAt),
         });
+        pending++;
+        await flushIfFull();
       }
     }
+
+    if (pending > 0) await batch.commit();
 
     await _guestMeta.markMigrationComplete();
     await _db.delete(_db.checkIns).go();

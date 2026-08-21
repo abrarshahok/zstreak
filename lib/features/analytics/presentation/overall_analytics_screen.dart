@@ -338,31 +338,7 @@ class _AnalyticsBody extends ConsumerStatefulWidget {
 }
 
 class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
-  final Map<String, StreakResult> _results = {};
-  bool _loaded = false;
   _TimeFilter _filter = _TimeFilter.month;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAll();
-  }
-
-  Future<void> _loadAll() async {
-    final repo = ref.read(habitRepositoryProvider);
-    for (final habit in widget.habits) {
-      final result = await repo
-          .watchStreakDetail(
-            habitId: habit.id,
-            frequencyType: habit.frequencyType,
-            frequencyConfig: habit.frequencyConfig,
-            createdAt: habit.createdAt,
-          )
-          .first;
-      _results[habit.id] = result;
-    }
-    if (mounted) setState(() => _loaded = true);
-  }
 
   List<HabitDayStatus> _filteredDays(StreakResult r) {
     final days = _filter.days;
@@ -406,33 +382,45 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded) {
+    // Watch the same streakDetailProvider family Home's tiles already
+    // populate, instead of hand-rolling a parallel fetch of the same
+    // Firestore/Drift query outside Riverpod's cache.
+    final asyncResults = {
+      for (final habit in widget.habits) habit.id: ref.watch(streakDetailProvider(habit)),
+    };
+
+    if (asyncResults.values.any((a) => a.isLoading && !a.hasValue)) {
       return Center(
         child: CircularProgressIndicator(color: widget.accent, strokeWidth: 2),
       );
     }
 
+    final results = <String, StreakResult>{
+      for (final entry in asyncResults.entries)
+        if (entry.value.hasValue) entry.key: entry.value.value!,
+    };
+
     final border = widget.isDark ? AppColors.border : AppColors.borderLight;
 
     // ── Aggregate metrics ─────────────────────────────────────────────────
-    final totalCheckIns = _results.values
+    final totalCheckIns = results.values
         .expand((r) => _filteredDays(r))
         .where((d) => d.status == DayStatus.completed)
         .length;
 
-    final avgRate = _results.isEmpty
+    final avgRate = results.isEmpty
         ? 0.0
-        : _results.values.fold<double>(0, (s, r) => s + _windowRate(r)) /
-              _results.length;
+        : results.values.fold<double>(0, (s, r) => s + _windowRate(r)) /
+              results.length;
 
-    final prevAvgRate = _results.isEmpty
+    final prevAvgRate = results.isEmpty
         ? 0.0
-        : _results.values.fold<double>(0, (s, r) => s + _prevWindowRate(r)) /
-              _results.length;
+        : results.values.fold<double>(0, (s, r) => s + _prevWindowRate(r)) /
+              results.length;
 
     final rateTrend = avgRate - prevAvgRate;
 
-    final longestEver = _results.values.fold<int>(
+    final longestEver = results.values.fold<int>(
       0,
       (s, r) => math.max(s, r.longestStreak),
     );
@@ -448,7 +436,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
     final chartData = List.generate(chartDays, (i) {
       final d = today.subtract(Duration(days: chartDays - 1 - i));
       final ds = localDateString(d);
-      final count = _results.values
+      final count = results.values
           .expand((r) => r.days)
           .where(
             (day) =>
@@ -462,7 +450,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
     // Day-of-week rates
     final dowCounts = List.filled(7, 0);
     final dowTotals = List.filled(7, 0);
-    for (final r in _results.values) {
+    for (final r in results.values) {
       for (final d in _filteredDays(r)) {
         if (d.status == DayStatus.future ||
             d.status == DayStatus.notApplicable) {
@@ -597,7 +585,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
               surface: widget.surface,
               child: _HabitBreakdown(
                 habits: widget.habits,
-                results: _results,
+                results: results,
                 textPrimary: widget.textPrimary,
                 textMuted: widget.textMuted,
                 windowRate: _windowRate,
@@ -619,7 +607,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
         const SizedBox(height: 10),
         _StreakLeaderboard(
               habits: widget.habits,
-              results: _results,
+              results: results,
               isDark: widget.isDark,
               surface: widget.surface,
               textPrimary: widget.textPrimary,

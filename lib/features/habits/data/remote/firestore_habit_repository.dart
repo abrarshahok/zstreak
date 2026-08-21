@@ -6,6 +6,7 @@ import '../../domain/frequency.dart';
 import '../../domain/habit.dart';
 import '../../domain/habit_repository.dart';
 import '../../domain/streak_calculator.dart';
+import 'habit_firestore_codec.dart';
 
 /// Signed-in/linked backend (spec Section 5) — same [HabitRepository]
 /// contract as [DriftHabitRepository], so every screen that depends on
@@ -65,20 +66,16 @@ class FirestoreHabitRepository implements HabitRepository {
     final id = _uuid.v4();
     final now = DateTime.now();
     final doc = _habits.doc(id);
-    await doc.set({
-      'name': name,
-      'emoji': emoji,
-      'colorHex': colorHex,
-      'frequencyType': frequencyType.toDbValue(),
-      'frequencyConfig': frequencyConfig.toJson(),
-      'reminderTime': reminderTime,
-      'description': description,
-      'currentStreak': 0,
-      'longestStreak': 0,
-      'createdAt': Timestamp.fromDate(now),
-      'archivedAt': null,
-      'updatedAt': Timestamp.fromDate(now),
-    });
+    await doc.set(HabitFirestoreCodec.forCreate(
+      name: name,
+      emoji: emoji,
+      colorHex: colorHex,
+      frequencyType: frequencyType,
+      frequencyConfig: frequencyConfig,
+      reminderTime: reminderTime,
+      description: description,
+      createdAt: now,
+    ));
     return _toDomain(await doc.get());
   }
 
@@ -157,13 +154,16 @@ class FirestoreHabitRepository implements HabitRepository {
     final habitDoc = await _habits.doc(habitId).get();
     final habit = _toDomain(habitDoc);
 
-    // Limit to 400 documents — caps Firestore reads per tap without
-    // affecting correctness for any realistic streak length.
+    // No limit here on purpose: StreakCalculator recomputes from the full
+    // completed-check-in history, so truncating this query (a previous
+    // `.limit(400)` here) silently fed it an arbitrary subset once a habit
+    // passed ~400 completions — wrong streaks for exactly the longest-lived
+    // habits. Reads still scale with habit age, but that's an honest cost,
+    // not a silent correctness bug.
     final checkInsSnap = await _habits
         .doc(habitId)
         .collection('check_ins')
         .where('completed', isEqualTo: true)
-        .limit(400)
         .get();
     final completedDates = checkInsSnap.docs.map((d) => d.id).toSet();
 
@@ -198,15 +198,16 @@ class FirestoreHabitRepository implements HabitRepository {
     final frequencyChanged = existing.frequencyType != frequencyType;
 
     await _habits.doc(id).update({
-      'name': name,
-      'emoji': emoji,
-      'colorHex': colorHex,
-      'frequencyType': frequencyType.toDbValue(),
-      'frequencyConfig': frequencyConfig.toJson(),
-      'reminderTime': reminderTime,
-      'description': description,
+      ...HabitFirestoreCodec.forUpdate(
+        name: name,
+        emoji: emoji,
+        colorHex: colorHex,
+        frequencyType: frequencyType,
+        frequencyConfig: frequencyConfig,
+        reminderTime: reminderTime,
+        description: description,
+      ),
       if (frequencyChanged) 'currentStreak': 0,
-      'updatedAt': Timestamp.now(),
     });
   }
 
@@ -266,13 +267,13 @@ class FirestoreHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     required DateTime createdAt,
   }) {
-    // Limit to 400 — caps the realtime listener document count without
-    // affecting correctness for any realistic streak length.
+    // No limit here — see the comment in _recalculateStreak(). The streak
+    // detail shown to the user must reflect the same full history the
+    // stored current/longest streak was computed from.
     return _habits
         .doc(habitId)
         .collection('check_ins')
         .where('completed', isEqualTo: true)
-        .limit(400)
         .snapshots()
         .map((snap) {
           return StreakCalculator.compute(
@@ -285,28 +286,6 @@ class FirestoreHabitRepository implements HabitRepository {
         });
   }
 
-  Habit _toDomain(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data()!;
-    final type = FrequencyType.fromDbValue(data['frequencyType'] as String);
-
-    return Habit(
-      id: doc.id,
-      name: data['name'] as String,
-      emoji: data['emoji'] as String,
-      colorHex: data['colorHex'] as String,
-      frequencyType: type,
-      frequencyConfig: FrequencyConfig.fromJson(
-        type,
-        Map<String, dynamic>.from(data['frequencyConfig'] as Map),
-      ),
-      reminderTime: data['reminderTime'] as String?,
-      description: data['description'] as String?,
-      currentStreak: data['currentStreak'] as int? ?? 0,
-      longestStreak: data['longestStreak'] as int? ?? 0,
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      archivedAt: (data['archivedAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
-      sortOrder: data['sortOrder'] as int? ?? 0,
-    );
-  }
+  Habit _toDomain(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      HabitFirestoreCodec.fromDocument(doc);
 }

@@ -380,9 +380,12 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     );
     if (confirmed != true) return;
     await ref.read(habitRepositoryProvider).deleteHabit(widget.existing!.id);
+    // Cancels both the daily reminder AND the scheduled streak-at-risk
+    // alert — cancelReminder alone left a deleted habit's 9pm risk alert
+    // firing anyway if it had already been scheduled for tonight.
     await ref
         .read(notificationServiceProvider)
-        .cancelReminder(widget.existing!.id);
+        .cancelAllForHabit(widget.existing!.id);
     // popUntil home — the stack is Home → HabitDetail → EditHabit,
     // so a single pop() would land on HabitDetail (which now shows a
     // deleted habit). Pop all the way back to the root instead.
@@ -399,9 +402,11 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     );
     if (confirmed != true) return;
     await ref.read(habitRepositoryProvider).archiveHabit(widget.existing!.id);
+    // See the matching comment in _confirmDelete() — an archived habit
+    // must not still fire its streak-at-risk alert tonight.
     await ref
         .read(notificationServiceProvider)
-        .cancelReminder(widget.existing!.id);
+        .cancelAllForHabit(widget.existing!.id);
     // Same as delete: pop all the way to home so the user doesn't land
     // on a HabitDetail screen for a habit that's now archived.
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);

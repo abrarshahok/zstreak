@@ -22,14 +22,6 @@ class Habits extends Table {
   DateTimeColumn get archivedAt => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
 
-  /// Feature 1 – Streak Freeze: number of available freeze tokens.
-  /// Defaults to 1 so new habits start with one free freeze.
-  IntColumn get streakFreezes => integer().withDefault(const Constant(1))();
-
-  /// Feature 1 – Streak Freeze: JSON-encoded list of "YYYY-MM-DD" strings
-  /// for days that were frozen (missed but protected from streak reset).
-  TextColumn get frozenDates => text().nullable()();
-
   /// Feature 6 – Drag-to-reorder: lower values appear first in the list.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
