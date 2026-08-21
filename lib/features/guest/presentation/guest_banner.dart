@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/auth_gate.dart';
@@ -190,24 +191,13 @@ class GuestBanner extends ConsumerWidget {
   }
 
   Future<void> _confirmLogOut(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text(
+      title: 'Log out?',
+      body:
           'You\'ll return to the start screen. Your local data stays on this device — link an account first if you want to keep it.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Log out', style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Log out',
+      isDanger: true,
     );
     if (confirmed != true) return;
     await ref.read(authRepositoryProvider).signOut();

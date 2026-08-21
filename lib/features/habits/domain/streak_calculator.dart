@@ -92,11 +92,12 @@ class StreakCalculator {
     required Set<String> completedDates,
     required DateTime today,
   }) {
-    final start = DateTime(
+    final createdDateOnly = DateTime(
       createdAtLocal.year,
       createdAtLocal.month,
       createdAtLocal.day,
     );
+    final start = _earliestRelevantDate(createdDateOnly, completedDates);
     final end = DateTime(today.year, today.month, today.day);
 
     var streak = 0;
@@ -151,8 +152,13 @@ class StreakCalculator {
     required DateTime today,
   }) {
     final end = DateTime(today.year, today.month, today.day);
+    final createdDateOnly = DateTime(
+      createdAtLocal.year,
+      createdAtLocal.month,
+      createdAtLocal.day,
+    );
     final start = _weekStart(
-      DateTime(createdAtLocal.year, createdAtLocal.month, createdAtLocal.day),
+      _earliestRelevantDate(createdDateOnly, completedDates),
       config.weekStartsOnMonday,
     );
 
@@ -201,6 +207,24 @@ class StreakCalculator {
       longestStreak: longest,
       days: days,
     );
+  }
+
+  /// The earliest day the grid/streak walk needs to consider — normally
+  /// the habit's own creation date, but extended earlier when a
+  /// backfilled check-in predates it ("Log a past day" and the
+  /// calendar grid both allow logging before a habit's creation date on
+  /// Pro), so that day actually gets a [HabitDayStatus] entry to render
+  /// instead of the check-in existing in storage with nowhere to show.
+  static DateTime _earliestRelevantDate(
+    DateTime createdDateOnly,
+    Set<String> completedDates,
+  ) {
+    var earliest = createdDateOnly;
+    for (final dateStr in completedDates) {
+      final date = DateTime.parse(dateStr);
+      if (date.isBefore(earliest)) earliest = date;
+    }
+    return earliest;
   }
 
   static DateTime _weekStart(DateTime day, bool weekStartsOnMonday) {

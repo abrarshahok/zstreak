@@ -27,6 +27,23 @@ void main() {
       expect((map['createdAt'] as Timestamp).toDate(), now);
       expect((map['updatedAt'] as Timestamp).toDate(), now);
     });
+
+    test('always includes sortOrder — watchActiveHabits orders by it, and '
+        'Firestore excludes documents missing an orderBy field entirely', () {
+      final map = HabitFirestoreCodec.forCreate(
+        name: 'Morning run',
+        emoji: '🏃',
+        colorHex: '#B57BFF',
+        frequencyType: FrequencyType.daily,
+        frequencyConfig: const DailyConfig(),
+        reminderTime: null,
+        description: null,
+        createdAt: DateTime(2026, 3, 10),
+      );
+
+      expect(map.containsKey('sortOrder'), isTrue);
+      expect(map['sortOrder'], 0);
+    });
   });
 
   group('HabitFirestoreCodec.forUpdate', () {

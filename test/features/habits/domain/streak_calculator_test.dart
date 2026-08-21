@@ -84,6 +84,26 @@ void main() {
       expect(result.days.length, 3);
       expect(result.currentStreak, 3);
     });
+
+    test('a backfilled check-in before creation still gets a day entry and counts', () {
+      // Habit created the 5th, but the user backfilled the 3rd and 4th too
+      // ("Log a past day" allows this on Pro) — those days must still show
+      // up on the grid and extend the streak, not silently vanish just
+      // because they predate createdAt.
+      final today = DateTime(2026, 3, 5);
+      final createdAt = DateTime(2026, 3, 5);
+      final result = StreakCalculator.compute(
+        frequencyType: FrequencyType.daily,
+        frequencyConfig: const DailyConfig(),
+        createdAtLocal: createdAt,
+        completedDates: const {'2026-03-03', '2026-03-04', '2026-03-05'},
+        today: today,
+      );
+
+      expect(result.days.length, 3);
+      expect(result.days.first.date, DateTime(2026, 3, 3));
+      expect(result.currentStreak, 3);
+    });
   });
 
   group('StreakCalculator — weekdays', () {

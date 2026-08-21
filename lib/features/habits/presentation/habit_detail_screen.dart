@@ -277,18 +277,26 @@ class HabitDetailScreen extends ConsumerWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // Free tier: only the past 7 days. Pro: back to habit creation date.
+    // Free tier: only the past 7 days. Pro: unlimited history — not tied
+    // to the habit's own creation date, since a habit created today
+    // should still let you backfill days before it existed (you were
+    // presumably doing the thing, just hadn't started tracking it yet).
+    // Bounding this to createdAt instead used to make firstDate land
+    // *after* lastDate for any habit created today, which showDatePicker
+    // asserts on and crashes.
+    // 7 days total including today: today itself is logged via the normal
+    // tap-to-check-in flow, not this picker, so the picker's own past-day
+    // range only needs to reach back 6 days to make the combined window
+    // exactly 7 (today - 6 days ago).
     final firstDate = isPro
-        ? DateTime(
-            habit.createdAt.year,
-            habit.createdAt.month,
-            habit.createdAt.day,
-          )
-        : today.subtract(const Duration(days: 7));
+        ? DateTime(2000, 1, 1)
+        : today.subtract(const Duration(days: 6));
 
     final lastDate = today.subtract(const Duration(days: 1));
 
-    // If free user has no eligible days (habit created today), gate them.
+    // If free user has no eligible days at all (the app itself is less
+    // than a day old — never happens in practice, but keeps the picker
+    // call below safe regardless).
     if (!isPro && firstDate.isAfter(lastDate)) {
       if (!context.mounted) return;
       await navigateToPaywall(context, ref);
@@ -552,11 +560,11 @@ class _MonthlyContributionGridState
   }
 
   /// Same free-tier backfill window as [HabitDetailScreen._logPastDay] —
-  /// today and the last 7 days are always toggleable; anything older needs
-  /// Pro. This grid used to let a tap on *any* past cell (in *any* month
-  /// the pager could reach, with no bound of its own) toggle it directly,
-  /// which bypassed that limit entirely regardless of what the "Log a
-  /// past day" button enforced.
+  /// the last 7 days *including* today are toggleable; anything older
+  /// needs Pro. This grid used to let a tap on *any* past cell (in *any*
+  /// month the pager could reach, with no bound of its own) toggle it
+  /// directly, which bypassed that limit entirely regardless of what the
+  /// "Log a past day" button enforced.
   bool _isDateLocked(DateTime date) {
     if (widget.isPro) return false;
     final today = DateTime.now();
@@ -564,7 +572,7 @@ class _MonthlyContributionGridState
       today.year,
       today.month,
       today.day,
-    ).subtract(const Duration(days: 7));
+    ).subtract(const Duration(days: 6));
     return date.isBefore(oldestFreeDate);
   }
 

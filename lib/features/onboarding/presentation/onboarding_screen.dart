@@ -307,6 +307,10 @@ class _SocialProofPill extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        // Two hardcoded colors here are a deliberate, scoped
+                        // exception to the single-accent-color rule — pure
+                        // decoration (avatar variety in a fake "N people"
+                        // stack), not a status or interactive color.
                         color: [
                           accent,
                           const Color(0xFFB14EFF),

@@ -22,6 +22,10 @@ class AppColors {
   static const Color textMuted = Color(0xFF888888);
   static const Color danger = Color(0xFFFF4D4D);
 
+  /// Reserved for Premium/Pro-only UI — reads as a notch more special
+  /// than the standard violet accent, in both themes.
+  static const Color premiumGold = Color(0xFFFFB300);
+
   // ── Light theme ────────────────────────────────────────────────────────────
   // Pure white base. Cards are white. Background is a very light grey.
   // Accent is a rich violet that reads well on white.

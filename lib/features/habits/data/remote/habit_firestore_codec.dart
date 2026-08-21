@@ -61,6 +61,13 @@ class HabitFirestoreCodec {
       'createdAt': Timestamp.fromDate(createdAt),
       'archivedAt': null,
       'updatedAt': Timestamp.fromDate(createdAt),
+      // Required — watchActiveHabits() orders by this field, and Firestore
+      // silently excludes any document missing an orderBy field from the
+      // query results. Without it, a newly created habit would write
+      // successfully but never appear in the list. Matches Drift's column
+      // default (0) for the same field, so new habits sort first until
+      // explicitly reordered — same as a fresh guest-mode habit would.
+      'sortOrder': 0,
     };
   }
 

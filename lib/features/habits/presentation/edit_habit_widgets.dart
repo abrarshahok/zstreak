@@ -49,7 +49,7 @@ class EditSectionCard extends StatelessWidget {
                 letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
           ],
           child,
         ],
@@ -185,7 +185,7 @@ class EditSaveFab extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             textStyle: GoogleFonts.outfit(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               fontSize: 15,
             ),
           ),

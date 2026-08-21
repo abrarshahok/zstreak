@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../data_export/data_export_providers.dart';
@@ -61,24 +62,13 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
     required String method,
     required Future<void> Function() signInDirectly,
   }) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('This account already exists'),
-        content: const Text(
+      title: 'This account already exists',
+      body:
           'Sign in instead? Your guest data on this device can be added to that account.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign in & merge'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Sign in & merge',
+      isDanger: false,
     );
     if (confirmed != true) return;
     await signInDirectly();

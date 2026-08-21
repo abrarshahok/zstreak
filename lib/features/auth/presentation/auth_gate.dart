@@ -46,11 +46,13 @@ class AuthGate extends ConsumerWidget {
 
     // ── Normal auth routing ──────────────────────────────────────────────────
     final authState = ref.watch(authStateProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
 
     return authState.when(
       loading: () => GenZBackground(
-        accentColor: AppColors.accent,
-        child: const Scaffold(
+        accentColor: accent,
+        child: Scaffold(
           backgroundColor: Colors.transparent,
           body: Center(
             child: SizedBox(
@@ -58,7 +60,7 @@ class AuthGate extends ConsumerWidget {
               height: 28,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                color: AppColors.accent,
+                color: accent,
               ),
             ),
           ),

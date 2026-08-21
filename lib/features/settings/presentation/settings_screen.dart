@@ -15,6 +15,7 @@ import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/theme/theme_mode_providers.dart';
+import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../../dev/seed_demo_data.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../auth/application/account_status_providers.dart';
@@ -22,6 +23,7 @@ import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/auth_gate.dart';
 import '../../data_export/data_export_providers.dart';
 import '../../guest/application/guest_providers.dart';
+import '../../habits/application/habit_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
@@ -209,14 +211,16 @@ class SettingsScreen extends ConsumerWidget {
                   ),
 
                   // ── Premium ───────────────────────────────────────────────────
-                  _SectionLabel('Premium', accent: accent),
+                  // Gold instead of the standard accent — this section should
+                  // feel a notch more special than a plain settings row.
+                  _SectionLabel('Premium', accent: AppColors.premiumGold),
                   _SettingsCard(
                     isDark: isDark,
                     children: [
                       _SettingsTile(
                         icon: Icons.bolt_rounded,
                         label: 'Unlock the full grind',
-                        accent: accent,
+                        accent: AppColors.premiumGold,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => navigateToPaywall(context, ref),
@@ -225,7 +229,7 @@ class SettingsScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.restore_rounded,
                         label: AppCopy.paywallRestorePurchases,
-                        accent: accent,
+                        accent: AppColors.premiumGold,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => _restorePurchases(context, ref),
@@ -234,7 +238,7 @@ class SettingsScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.widgets_outlined,
                         label: 'Add home screen widget',
-                        accent: accent,
+                        accent: AppColors.premiumGold,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => _addWidget(context, ref),
@@ -268,14 +272,16 @@ class SettingsScreen extends ConsumerWidget {
                   ],
 
                   // ── Legal & Support ───────────────────────────────────────────
-                  _SectionLabel('Legal & Support', accent: accent),
+                  // Muted instead of the standard accent — low-emotional-weight
+                  // rows that shouldn't compete visually with Premium/Account.
+                  _SectionLabel('Legal & Support', accent: textMuted),
                   _SettingsCard(
                     isDark: isDark,
                     children: [
                       _SettingsTile(
                         icon: Icons.privacy_tip_outlined,
                         label: 'Privacy Policy',
-                        accent: accent,
+                        accent: textMuted,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => launchUrl(
@@ -286,7 +292,7 @@ class SettingsScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.gavel_rounded,
                         label: 'Terms of Service',
-                        accent: accent,
+                        accent: textMuted,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => launchUrl(
@@ -297,7 +303,7 @@ class SettingsScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.mail_outline_rounded,
                         label: 'Contact support',
-                        accent: accent,
+                        accent: textMuted,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () =>
@@ -334,7 +340,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _logOut(BuildContext context, WidgetRef ref) async {
-    final confirmed = await _showFlatConfirmDialog(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
       title: 'Log out?',
       body: 'You\'ll be signed out of your account.',
@@ -348,7 +354,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmGuestLogOut(BuildContext context, WidgetRef ref) async {
-    final confirmed = await _showFlatConfirmDialog(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
       title: 'You\'re in Guest Mode',
       body:
@@ -400,7 +406,7 @@ class SettingsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
-    final confirmed = await _showFlatConfirmDialog(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
       title: 'Clear all data?',
       body:
@@ -426,7 +432,7 @@ class SettingsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
-    final confirmed = await _showFlatConfirmDialog(
+    final confirmed = await showFlatConfirmDialog(
       context: context,
       title: 'Deactivate account?',
       body:
@@ -456,113 +462,6 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(authRepositoryProvider).signOut();
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  /// Flat-design confirmation dialog matching the app's design system.
-  static Future<bool?> _showFlatConfirmDialog({
-    required BuildContext context,
-    required String title,
-    required String body,
-    required String confirmLabel,
-    required bool isDanger,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
-    final textPrimary = isDark
-        ? AppColors.textPrimary
-        : AppColors.textPrimaryLight;
-    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
-    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
-    final confirmColor = isDanger
-        ? AppColors.danger
-        : (isDark ? AppColors.accent : AppColors.accentTextOnLight);
-    final confirmFg = isDanger
-        ? Colors.white
-        : (isDark ? Colors.black : Colors.white);
-
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: textPrimary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 17,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                body,
-                style: TextStyle(color: textMuted, fontSize: 13, height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.of(ctx).pop(false),
-                      child: Container(
-                        height: 46,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: borderColor, width: 1),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: textMuted,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.of(ctx).pop(true),
-                      child: Container(
-                        height: 46,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: confirmColor,
-                        ),
-                        child: Center(
-                          child: Text(
-                            confirmLabel,
-                            style: TextStyle(
-                              color: confirmFg,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _restorePurchases(BuildContext context, WidgetRef ref) async {
@@ -1139,14 +1038,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        'Tap to edit name',
-                        style: TextStyle(
-                          color: widget.textMuted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      _ProfileStatLine(textMuted: widget.textMuted),
                     ],
                   ),
                 ),
@@ -1630,6 +1522,44 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Profile stat line ─────────────────────────────────────────────────────────
+//
+// Replaces the plain "Tap to edit name" hint with a real, live number —
+// habit count and best-ever streak — so the profile header reflects
+// actual progress instead of reading as a static form field.
+class _ProfileStatLine extends ConsumerWidget {
+  const _ProfileStatLine({required this.textMuted});
+  final Color textMuted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final habits = ref.watch(activeHabitsProvider).valueOrNull;
+    if (habits == null || habits.isEmpty) {
+      return Text(
+        'Tap to edit name',
+        style: TextStyle(
+          color: textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+    final bestStreak = habits.fold<int>(
+      0,
+      (best, h) => h.longestStreak > best ? h.longestStreak : best,
+    );
+    final habitLabel = habits.length == 1 ? 'habit' : 'habits';
+    return Text(
+      '${habits.length} $habitLabel · 🔥 $bestStreak day best',
+      style: TextStyle(
+        color: textMuted,
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 }
