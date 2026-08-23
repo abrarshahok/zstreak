@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon — the status bar/notification shade forces
+     every non-transparent pixel to solid white regardless of fillColor
+     here, discarding all color info. The app icon's full-color flame
+     mosaic (previously used directly as @mipmap/ic_launcher) rendered as
+     a blob under that treatment instead of a recognizable shape, so this
+     is a dedicated silhouette-only asset — same flame outline as the real
+     app icon (see scratchpad's make_icon.py SEGMENTS), just the shape,
+     scaled/offset by the same 10% margin the app icon uses. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,86.8 C72.4,83.6 82,66 74,46 C66,30 56.4,16.4 46.8,13.2 C42,11.6 38.8,13.2 40.4,19.6 C45.2,32.4 34,38 40.4,51.6 C50,64.4 22,74 50,86.8 Z" />
+</vector>

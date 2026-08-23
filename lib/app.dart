@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:home_widget/home_widget.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_providers.dart';
@@ -13,27 +12,74 @@ import 'features/habits/presentation/habit_detail_screen.dart';
 import 'features/monetization/application/entitlement_providers.dart';
 import 'features/notifications/application/notification_providers.dart';
 import 'features/onboarding/application/user_profile_provider.dart';
+import 'features/widgets/application/widget_providers.dart';
+import 'features/widgets/data/widget_pin_channel.dart';
 import 'features/widgets/presentation/widget_configure_screen.dart';
 
 final navigatorKeyProvider = Provider((ref) => GlobalKey<NavigatorState>());
 
 class ZStreakApp extends ConsumerStatefulWidget {
-  const ZStreakApp({super.key});
+  const ZStreakApp({super.key, this.configuringWidgetId});
+
+  /// Resolved in main.dart *before* runApp() — see the comment there for
+  /// why this can't be a reactive setState in this widget's own initState.
+  final int? configuringWidgetId;
 
   @override
   ConsumerState<ZStreakApp> createState() => _ZStreakAppState();
 }
 
 class _ZStreakAppState extends ConsumerState<ZStreakApp> {
-  int? _configuringWidgetId;
-
   @override
   void initState() {
     super.initState();
     _initNotifications();
     _initRevenueCat();
-    _checkWidgetConfigureLaunch();
     _refreshNotifications();
+    _syncWidgets();
+    listenForPinnedHabitWidget(_onWidgetPinned);
+  }
+
+  /// The Settings "Add home screen widget" button requests a pin directly
+  /// (see widget_pin_channel.dart for why) rather than the user dragging
+  /// one from the OS widget tray, so this is the substitute for the
+  /// configure screen the launcher doesn't invoke on its own for that
+  /// flow — push it onto whatever's currently showing, exactly like a
+  /// notification tap already does via [navigatorKeyProvider].
+  void _onWidgetPinned(int widgetId) {
+    ref
+        .read(navigatorKeyProvider)
+        .currentState
+        ?.push(
+          MaterialPageRoute(
+            builder: (_) => WidgetConfigureScreen(widgetId: widgetId),
+          ),
+        );
+  }
+
+  /// Cold-start reconciliation for any already-placed widgets — the only
+  /// caller of [WidgetSyncService.syncHabits], which otherwise exists but
+  /// is never invoked. Per-mutation syncing (create/check-in/edit/archive)
+  /// covers habits that change while the app is open, but a widget placed
+  /// for a habit that hasn't been touched since — or whose premium_active
+  /// flag never got set because no mutation had run yet — would otherwise
+  /// sit stale or show the locked/placeholder state indefinitely.
+  Future<void> _syncWidgets() async {
+    try {
+      final repo = ref.read(habitRepositoryProvider);
+      final habits = await repo.watchActiveHabits().first;
+      final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+      await ref
+          .read(widgetSyncServiceProvider)
+          .syncHabits(
+            habits,
+            (id, date) => repo.watchCheckIn(habitId: id, date: date).first,
+            (id) => repo.watchHabitCheckIns(id).first,
+            isPremium: isPremium,
+          );
+    } catch (_) {
+      // Best-effort — a widget refresh failing must never block startup.
+    }
   }
 
   /// Initialize the notification plugin and request POST_NOTIFICATIONS
@@ -71,16 +117,6 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
     }
   }
 
-  /// Android launches us specially the moment a widget instance is
-  /// placed (spec Section 2) — that takes over the whole app instead of
-  /// the normal auth-gated flow until a habit is chosen.
-  Future<void> _checkWidgetConfigureLaunch() async {
-    final idString =
-        await HomeWidget.initiallyLaunchedFromHomeWidgetConfigure();
-    final id = idString == null ? null : int.tryParse(idString);
-    if (id != null && mounted) setState(() => _configuringWidgetId = id);
-  }
-
   Future<void> _openHabit(String habitId) async {
     final habit = await ref.read(habitRepositoryProvider).getHabitById(habitId);
     if (habit == null) return;
@@ -114,17 +150,28 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
         // [AccountStatusGate] is what actually handles the UI for that
         // account state; this just avoids a doomed network call ahead of it.
         if (user?.isAnonymous == false) {
-          ref.read(accountStatusRepositoryProvider).getStatus(uid).then((status) {
-            if (!status.isActive) return;
-            final profileNotifier = ref.read(userProfileProvider.notifier);
-            profileNotifier.syncFromFirestore(uid).then((_) {
-              // Google's photo isn't part of the onboarding questionnaire, so
-              // it's kept separately in sync with whatever Firebase Auth
-              // currently reports — after the Firestore sync above, so an
-              // older remote profile with no photoUrl never clobbers it.
-              profileNotifier.setPhotoUrl(user?.photoURL, uid: uid);
-            });
-          });
+          // Held true until the chain below finishes (however it finishes)
+          // so AuthGate holds off on profileCompleteProvider — see
+          // profileHydratingProvider's own doc comment for why.
+          ref.read(profileHydratingProvider.notifier).state = true;
+          ref
+              .read(accountStatusRepositoryProvider)
+              .getStatus(uid)
+              .then((status) {
+                if (!status.isActive) return Future<void>.value();
+                final profileNotifier = ref.read(userProfileProvider.notifier);
+                return profileNotifier.syncFromFirestore(uid).then((_) {
+                  // Google's photo isn't part of the onboarding questionnaire,
+                  // so it's kept separately in sync with whatever Firebase
+                  // Auth currently reports — after the Firestore sync above,
+                  // so an older remote profile with no photoUrl never
+                  // clobbers it.
+                  profileNotifier.setPhotoUrl(user?.photoURL, uid: uid);
+                });
+              })
+              .whenComplete(() {
+                ref.read(profileHydratingProvider.notifier).state = false;
+              });
         }
       } else {
         service.logOut();
@@ -139,8 +186,8 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ref.watch(themeModeProvider),
-      home: _configuringWidgetId != null
-          ? WidgetConfigureScreen(widgetId: _configuringWidgetId!)
+      home: widget.configuringWidgetId != null
+          ? WidgetConfigureScreen(widgetId: widget.configuringWidgetId!)
           : const AuthGate(),
     );
   }

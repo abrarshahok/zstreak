@@ -3,7 +3,6 @@ import '../../habits/domain/frequency.dart';
 import '../../habits/domain/habit.dart';
 import '../../habits/domain/habit_repository.dart';
 import '../../habits/domain/streak_calculator.dart';
-import '../../monetization/domain/entitlement_repository.dart';
 import 'widget_sync_service.dart';
 
 /// Decorates any [HabitRepository] so every mutation re-syncs the Android
@@ -16,12 +15,20 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   WidgetSyncingHabitRepository(
     this._inner,
     this._widgetSync,
-    this._entitlements,
+    this._isPremium,
   );
 
   final HabitRepository _inner;
   final WidgetSyncService _widgetSync;
-  final EntitlementRepository _entitlements;
+
+  /// Reads `hasActiveEntitlementProvider` (passed in by the caller,
+  /// rather than an [EntitlementRepository] queried directly) so this
+  /// honours the debug-mode Pro-simulation override and Riverpod's
+  /// caching the same way the rest of the app does — hitting RevenueCat
+  /// live on every single check-in both made the widget feel laggy and,
+  /// since the override doesn't apply at that layer, flipped it back to
+  /// the locked "Subscribe to continue" state on the very next sync.
+  final Future<bool> Function() _isPremium;
 
   @override
   Stream<List<Habit>> watchActiveHabits() => _inner.watchActiveHabits();
@@ -95,6 +102,16 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   }
 
   @override
+  Future<bool> toggleCheckIn({
+    required String habitId,
+    required String date,
+  }) async {
+    final newCompleted = await _inner.toggleCheckIn(habitId: habitId, date: date);
+    await _syncHabit(habitId);
+    return newCompleted;
+  }
+
+  @override
   Future<void> updateHabit({
     required String id,
     required String name,
@@ -149,10 +166,11 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   Future<void> _syncHabit(String habitId) async {
     final habit = await _inner.getHabitById(habitId);
     if (habit == null) return; // deleted mid-flight; nothing to sync
-    final isPremium = await _entitlements.hasActiveEntitlement();
+    final isPremium = await _isPremium();
     await _widgetSync.syncSingleHabit(
       habit,
       (id, date) => _inner.watchCheckIn(habitId: id, date: date).first,
+      (id) => _inner.watchHabitCheckIns(id).first,
       isPremium: isPremium,
     );
   }

@@ -15,36 +15,51 @@ class AnalyticsService {
 
   Future<void> logGuestStarted() => _analytics.logEvent(name: 'guest_started');
 
-  Future<void> logSignUp(String method) => _analytics.logSignUp(signUpMethod: method);
+  Future<void> logSignUp(String method) =>
+      _analytics.logSignUp(signUpMethod: method);
 
-  Future<void> logLogin(String method) => _analytics.logLogin(loginMethod: method);
+  Future<void> logLogin(String method) =>
+      _analytics.logLogin(loginMethod: method);
 
   /// [timing] is one of `immediate` / `mid_window` / `forced_expiry` —
   /// Section 9 asks to tune the Stage 5 escalation timing off this.
-  Future<void> logGuestLinked({required String method, required String timing}) =>
-      _analytics.logEvent(
-        name: 'guest_linked',
-        parameters: {'method': method, 'timing': timing},
-      );
+  Future<void> logGuestLinked({
+    required String method,
+    required String timing,
+  }) => _analytics.logEvent(
+    name: 'guest_linked',
+    parameters: {'method': method, 'timing': timing},
+  );
 
   /// [habitNumber] is this account's Nth active habit — Section 9 tracks
   /// "% of users who create a 2nd habit" as a real-engagement signal.
   Future<void> logHabitCreated({required int habitNumber}) =>
-      _analytics.logEvent(name: 'habit_created', parameters: {'habit_number': habitNumber});
-
-  Future<void> logTrialStarted(String productId) =>
-      _analytics.logEvent(name: 'trial_started', parameters: {'product_id': productId});
-
-  Future<void> logPurchaseCompleted(String productId) =>
-      _analytics.logEvent(name: 'purchase_completed', parameters: {'product_id': productId});
-
-  Future<void> logStreakMilestone({required String habitId, required int streak}) =>
       _analytics.logEvent(
-        name: 'streak_milestone',
-        parameters: {'habit_id': habitId, 'streak': streak},
+        name: 'habit_created',
+        parameters: {'habit_number': habitNumber},
       );
+
+  Future<void> logTrialStarted(String productId) => _analytics.logEvent(
+    name: 'trial_started',
+    parameters: {'product_id': productId},
+  );
+
+  Future<void> logPurchaseCompleted(String productId) => _analytics.logEvent(
+    name: 'purchase_completed',
+    parameters: {'product_id': productId},
+  );
+
+  Future<void> logStreakMilestone({
+    required String habitId,
+    required int streak,
+  }) => _analytics.logEvent(
+    name: 'streak_milestone',
+    parameters: {'habit_id': habitId, 'streak': streak},
+  );
 
   Future<void> setUserId(String? uid) => _analytics.setUserId(id: uid);
 }
 
-final analyticsServiceProvider = Provider<AnalyticsService>((ref) => AnalyticsService());
+final analyticsServiceProvider = Provider<AnalyticsService>(
+  (ref) => AnalyticsService(),
+);

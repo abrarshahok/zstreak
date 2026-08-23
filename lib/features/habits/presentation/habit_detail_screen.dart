@@ -4,12 +4,16 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
+import '../../notifications/application/notification_providers.dart';
+import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
@@ -23,6 +27,55 @@ class HabitDetailScreen extends ConsumerWidget {
 
   final Habit habit;
 
+  // Both actions previously lived only behind EditHabitScreen's overflow
+  // menu — a habit's own detail page is where people are most likely to
+  // reach for "archive this" or "delete this", so this mirrors that same
+  // confirm-dialog flow directly here instead of requiring a detour
+  // through Edit first.
+
+  Future<void> _archive(
+    BuildContext context,
+    WidgetRef ref,
+    Habit currentHabit,
+  ) async {
+    final confirmed = await showFlatConfirmDialog(
+      context: context,
+      title: 'Archive habit?',
+      body:
+          'This habit will be hidden from your list. You can restore it from the archived habits screen.',
+      confirmLabel: 'Archive',
+      isDanger: false,
+    );
+    if (confirmed != true) return;
+    await ref.read(habitRepositoryProvider).archiveHabit(currentHabit.id);
+    // An archived habit must not still fire its streak-at-risk alert
+    // tonight — same reasoning as EditHabitScreen's _archive().
+    await ref
+        .read(notificationServiceProvider)
+        .cancelAllForHabit(currentHabit.id);
+    if (context.mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Habit currentHabit,
+  ) async {
+    final confirmed = await showFlatConfirmDialog(
+      context: context,
+      title: AppCopy.deleteHabitConfirmTitle,
+      body: AppCopy.deleteHabitConfirmBody,
+      confirmLabel: 'Delete',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    await ref.read(habitRepositoryProvider).deleteHabit(currentHabit.id);
+    await ref
+        .read(notificationServiceProvider)
+        .cancelAllForHabit(currentHabit.id);
+    if (context.mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // [habit] is a snapshot from whenever this screen was pushed — it
@@ -33,10 +86,8 @@ class HabitDetailScreen extends ConsumerWidget {
     // back to the pushed-in snapshot if it's not in the loaded list yet
     // (e.g. the first frame, while it's still loading).
     final liveHabits = ref.watch(activeHabitsProvider).valueOrNull;
-    final currentHabit = liveHabits?.firstWhere(
-          (h) => h.id == habit.id,
-          orElse: () => habit,
-        ) ??
+    final currentHabit =
+        liveHabits?.firstWhere((h) => h.id == habit.id, orElse: () => habit) ??
         habit;
 
     final detail = ref.watch(streakDetailProvider(currentHabit));
@@ -52,22 +103,70 @@ class HabitDetailScreen extends ConsumerWidget {
 
     final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
+    // Same check-in toggle HabitTile/HabitGridCard have on Home — this
+    // screen had no quick way to check today off without scrolling down
+    // to the calendar grid and tapping today's cell. Independent of
+    // [detail] (streakDetailProvider), so it's ready even while that's
+    // still loading.
+    final today = todayLocalDateString();
+    final checkIn = ref.watch(
+      checkInProvider(CheckInQuery(currentHabit.id, today)),
+    );
+    final isDone = checkIn.valueOrNull?.completed ?? false;
+    final isScheduledToday = currentHabit.isScheduledOnWeekday(
+      DateTime.now().weekday,
+    );
+    void toggleCheckIn() => performCheckIn(
+      context: context,
+      ref: ref,
+      habit: currentHabit,
+      date: today,
+      isDone: isDone,
+    );
+
     return Scaffold(
       backgroundColor: bg,
       body: detail.when(
         loading: () => CustomScrollView(
           slivers: [
-            _HeroHeader(habit: currentHabit, accentColor: accentColor, isDark: isDark),
+            _HeroHeader(
+              habit: currentHabit,
+              accentColor: accentColor,
+              isDark: isDark,
+              isDone: isDone,
+              isScheduledToday: isScheduledToday,
+              onToggleCheckIn: toggleCheckIn,
+              onArchive: () => _archive(context, ref, currentHabit),
+              onDelete: () => _confirmDelete(context, ref, currentHabit),
+            ),
             SliverToBoxAdapter(child: _HabitDetailSkeleton(isDark: isDark)),
           ],
         ),
         error: (error, _) => Center(child: Text('$error')),
         data: (result) => CustomScrollView(
           slivers: [
-            _HeroHeader(habit: currentHabit, accentColor: accentColor, isDark: isDark),
+            _HeroHeader(
+              habit: currentHabit,
+              accentColor: accentColor,
+              isDark: isDark,
+              isDone: isDone,
+              isScheduledToday: isScheduledToday,
+              onToggleCheckIn: toggleCheckIn,
+              onArchive: () => _archive(context, ref, currentHabit),
+              onDelete: () => _confirmDelete(context, ref, currentHabit),
+            ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                // Flat 40 bottom padding used to sit mostly *behind* a
+                // device's system nav bar instead of being visible space
+                // above it, so "Log a past day" ended up flush against
+                // the edge instead of having real breathing room.
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  20,
+                  16,
+                  40 + MediaQuery.of(context).padding.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -317,12 +416,41 @@ class HabitDetailScreen extends ConsumerWidget {
       return;
     }
 
+    // showDatePicker asserts that initialDate satisfies
+    // selectableDayPredicate, so lastDate (usually "yesterday") can't be
+    // used blindly — a sparse weekdays schedule (e.g. Mondays only) may
+    // not land on it. Walk back to the nearest day this habit is actually
+    // scheduled for; a weekdays habit is guaranteed one within any 7-day
+    // span, but the free tier's 6-day window is one short of that
+    // guarantee, so there's a real (rare) chance none exists at all.
+    DateTime? initialDate;
+    for (
+      var d = lastDate;
+      !d.isBefore(firstDate);
+      d = d.subtract(const Duration(days: 1))
+    ) {
+      if (habit.isScheduledOnWeekday(d.weekday)) {
+        initialDate = d;
+        break;
+      }
+    }
+    if (initialDate == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No eligible days to log in this range.')),
+      );
+      return;
+    }
+
     if (!context.mounted) return;
     final picked = await showDatePicker(
       context: context,
       firstDate: firstDate,
       lastDate: lastDate,
-      initialDate: lastDate,
+      initialDate: initialDate,
+      // Days this habit isn't scheduled for (e.g. picking a Sunday for a
+      // Mon/Wed/Fri habit) aren't valid backfill targets at all.
+      selectableDayPredicate: (day) => habit.isScheduledOnWeekday(day.weekday),
     );
     if (picked == null) return;
     // Do NOT guard setCheckIn with context.mounted — setCheckIn doesn't use
@@ -355,7 +483,14 @@ class _HabitDetailSkeleton extends StatelessWidget {
       isDark: isDark,
       builder: (context, colors) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+          // Same fix as the data path a bit further up — flat 40 sat
+          // partly behind a device's system nav bar during loading.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            20,
+            16,
+            40 + MediaQuery.of(context).padding.bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -363,8 +498,15 @@ class _HabitDetailSkeleton extends StatelessWidget {
                 children: List.generate(3, (i) {
                   return Expanded(
                     child: Padding(
-                      padding: EdgeInsets.only(left: i == 0 ? 0 : 4, right: i == 2 ? 0 : 4),
-                      child: ShimmerCard(colors: colors, height: 76, child: const SizedBox()),
+                      padding: EdgeInsets.only(
+                        left: i == 0 ? 0 : 4,
+                        right: i == 2 ? 0 : 4,
+                      ),
+                      child: ShimmerCard(
+                        colors: colors,
+                        height: 76,
+                        child: const SizedBox(),
+                      ),
                     ),
                   );
                 }),
@@ -490,6 +632,14 @@ class _MonthlyContributionGridState
   late int _displayYear;
   late int _displayMonth;
 
+  /// Guards against a rapid double-tap on the *same* day cell firing two
+  /// overlapping [setCheckIn] calls before the grid rebuilds with the new
+  /// status — both would otherwise read the same stale [DayStatus] snapshot
+  /// and write the same target value, harmless in itself but a wasted
+  /// duplicate write. Different days toggle independently and aren't
+  /// guarded against each other.
+  final Set<String> _pendingToggles = {};
+
   @override
   void initState() {
     super.initState();
@@ -563,14 +713,20 @@ class _MonthlyContributionGridState
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _toggleDay(DateTime date, DayStatus? currentStatus) async {
-    HapticFeedback.lightImpact();
-    await ref
-        .read(habitRepositoryProvider)
-        .setCheckIn(
-          habitId: widget.habit.id,
-          date: _dateKey(date),
-          completed: currentStatus != DayStatus.completed,
-        );
+    final key = _dateKey(date);
+    if (!_pendingToggles.add(key)) return;
+    try {
+      HapticFeedback.lightImpact();
+      await ref
+          .read(habitRepositoryProvider)
+          .setCheckIn(
+            habitId: widget.habit.id,
+            date: key,
+            completed: currentStatus != DayStatus.completed,
+          );
+    } finally {
+      _pendingToggles.remove(key);
+    }
   }
 
   /// Same free-tier backfill window as [HabitDetailScreen._logPastDay] —
@@ -591,6 +747,10 @@ class _MonthlyContributionGridState
   }
 
   Future<void> _handleDayTap(DateTime date, DayStatus? currentStatus) async {
+    // Defensive: the day-cell's onTap is already null for a non-scheduled
+    // date, but this is the one entry point for toggling a day, so it's
+    // the right place to refuse it outright too.
+    if (!widget.habit.isScheduledOnWeekday(date.weekday)) return;
     if (_isDateLocked(date)) {
       await navigateToPaywall(context, ref);
       return;
@@ -672,7 +832,9 @@ class _MonthlyContributionGridState
                     isDark: widget.isDark,
                     cellSize: cellSize,
                     gap: cellGap,
-                    onTap: isFuture
+                    onTap:
+                        (isFuture ||
+                            !widget.habit.isScheduledOnWeekday(date.weekday))
                         ? null
                         : () => _handleDayTap(date, dayStatus?.status),
                   );
@@ -710,6 +872,7 @@ class _MonthlyContributionGridState
                 onTap: _prev,
                 textMuted: widget.textMuted,
                 accentColor: widget.accentColor,
+                label: 'Previous month',
               ),
               Expanded(
                 child: Center(
@@ -733,6 +896,7 @@ class _MonthlyContributionGridState
                 onTap: _next,
                 textMuted: widget.textMuted,
                 accentColor: widget.accentColor,
+                label: 'Next month',
               ),
             ],
           ),
@@ -882,6 +1046,7 @@ class _NavArrow extends StatelessWidget {
     required this.onTap,
     required this.textMuted,
     required this.accentColor,
+    required this.label,
   });
 
   final IconData icon;
@@ -889,17 +1054,23 @@ class _NavArrow extends StatelessWidget {
   final VoidCallback onTap;
   final Color textMuted;
   final Color accentColor;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(
-          icon,
-          size: 20,
-          color: enabled ? accentColor : textMuted.withValues(alpha: 0.3),
+    return Semantics(
+      label: label,
+      button: true,
+      enabled: enabled,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            icon,
+            size: 20,
+            color: enabled ? accentColor : textMuted.withValues(alpha: 0.3),
+          ),
         ),
       ),
     );
@@ -913,11 +1084,21 @@ class _HeroHeader extends StatelessWidget {
     required this.habit,
     required this.accentColor,
     required this.isDark,
+    required this.isDone,
+    required this.isScheduledToday,
+    required this.onToggleCheckIn,
+    required this.onArchive,
+    required this.onDelete,
   });
 
   final Habit habit;
   final Color accentColor;
   final bool isDark;
+  final bool isDone;
+  final bool isScheduledToday;
+  final VoidCallback onToggleCheckIn;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -942,6 +1123,7 @@ class _HeroHeader extends StatelessWidget {
           size: 18,
           color: textPrimary,
         ),
+        tooltip: 'Back',
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
@@ -950,6 +1132,46 @@ class _HeroHeader extends StatelessWidget {
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => EditHabitScreen(existing: habit)),
           ),
+        ),
+        // Previously only reachable via EditHabitScreen's own overflow
+        // menu — a habit's own detail page is where people are most
+        // likely to reach for this, so it's mirrored here directly.
+        PopupMenuButton<String>(
+          icon: Icon(Icons.more_vert_rounded, size: 18, color: textPrimary),
+          color: surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          onSelected: (value) {
+            if (value == 'archive') onArchive();
+            if (value == 'delete') onDelete();
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'archive',
+              child: Row(
+                children: [
+                  Icon(Icons.archive_outlined, size: 18, color: textMuted),
+                  const SizedBox(width: 10),
+                  Text('Archive', style: TextStyle(color: textPrimary)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: AppColors.danger,
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Delete', style: TextStyle(color: AppColors.danger)),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
       bottom: PreferredSize(
@@ -1063,6 +1285,21 @@ class _HeroHeader extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Semantics(
+                    label: !isScheduledToday
+                        ? '${habit.name}, not scheduled today'
+                        : isDone
+                        ? '${habit.name}, done today, tap to undo'
+                        : '${habit.name}, mark done today',
+                    button: true,
+                    child: _DetailCheckInToggle(
+                      isDone: isDone,
+                      color: accentColor,
+                      enabled: isScheduledToday,
+                      onTap: isScheduledToday ? onToggleCheckIn : null,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1093,6 +1330,130 @@ class _HeroHeader extends StatelessWidget {
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final displayMinute = minute.toString().padLeft(2, '0');
     return '$displayHour:$displayMinute $period';
+  }
+}
+
+// ─── Hero header check-in toggle ───────────────────────────────────────────────
+//
+// Mirrors HabitTile's _CheckInToggle exactly (same size, animation, and
+// enabled/muted states) — this screen otherwise had no quick way to check
+// today off without scrolling to the calendar grid and tapping today's cell.
+
+class _DetailCheckInToggle extends StatefulWidget {
+  const _DetailCheckInToggle({
+    required this.isDone,
+    required this.color,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final bool isDone;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool enabled;
+
+  @override
+  State<_DetailCheckInToggle> createState() => _DetailCheckInToggleState();
+}
+
+class _DetailCheckInToggleState extends State<_DetailCheckInToggle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.25), weight: 40),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.25,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 60,
+      ),
+    ]).animate(_controller);
+  }
+
+  @override
+  void didUpdateWidget(_DetailCheckInToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isDone && !oldWidget.isDone) {
+      _controller.forward(from: 0);
+    } else if (!widget.isDone) {
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.2)
+        : Colors.black.withValues(alpha: 0.15);
+    final checkIconColor = contrastForeground(widget.color);
+
+    return Opacity(
+      opacity: widget.enabled ? 1.0 : 0.35,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: widget.isDone ? _scale.value : 1.0,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 36,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: widget.isDone ? widget.color : Colors.transparent,
+                  border: Border.all(
+                    color: widget.isDone ? widget.color : borderColor,
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      widget.isDone ? Icons.check_rounded : Icons.add_rounded,
+                      size: 16,
+                      color: widget.isDone
+                          ? checkIconColor
+                          : (isDark ? Colors.white70 : Colors.black54),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      widget.isDone ? 'Done' : 'Check in',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: widget.isDone
+                            ? checkIconColor
+                            : (isDark ? Colors.white70 : Colors.black54),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 

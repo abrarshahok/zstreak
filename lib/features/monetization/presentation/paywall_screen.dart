@@ -17,8 +17,54 @@ import '../application/entitlement_providers.dart';
 
 final _offeringsProvider = FutureProvider<List<Package>>((ref) async {
   final offerings = await ref.read(revenueCatServiceProvider).getOfferings();
-  return offerings.current?.availablePackages ?? [];
+  // offerings.current is null whenever the RevenueCat dashboard doesn't
+  // have an offering explicitly marked "current" — that's a dashboard
+  // config gap, not a "no products" state, so falling back to any
+  // offering that actually has packages keeps the paywall usable instead
+  // of silently rendering an empty, permanently-disabled "Get Pro" button.
+  final offering =
+      offerings.current ??
+      offerings.all.values
+          .where((o) => o.availablePackages.isNotEmpty)
+          .firstOrNull;
+  return offering?.availablePackages ?? [];
 });
+
+/// Short billing-period suffix for a price string — "$5.99/mo",
+/// "$34.99/yr" — driven by RevenueCat's own [PackageType] rather than
+/// array position, so it stays correct no matter what order the
+/// dashboard returns monthly/annual/lifetime in. Lifetime has no
+/// recurring period, so it gets no suffix here; its "one-time" wording
+/// is shown separately wherever the price itself is displayed.
+String pricePeriodSuffix(Package pkg) => switch (pkg.packageType) {
+  PackageType.monthly => '/mo',
+  PackageType.annual => '/yr',
+  PackageType.weekly => '/wk',
+  _ => '',
+};
+
+bool isLifetimePackage(Package pkg) => pkg.packageType == PackageType.lifetime;
+
+/// Google Play Billing appends " (AppName)" to every product's title at
+/// the API level — e.g. "ZStreak Pro (ZStreak)" — regardless of what's
+/// actually typed into the product's Name field in Play Console. It's
+/// meant to disambiguate purchases in system dialogs; on the app's own
+/// paywall the app's own name is just redundant, so this strips it.
+String cleanProductTitle(String title) =>
+    title.replaceAll(RegExp(r'\s*\([^)]*\)\s*$'), '').trim();
+
+/// Plan card title driven by [PackageType] rather than whatever's
+/// configured as the product's name in Play Console — every package
+/// there is literally named "ZStreak Pro" (Play Billing then appends
+/// " (ZStreak)" on top of that), so the three plan cards were otherwise
+/// indistinguishable at a glance.
+String planTitle(Package pkg) => switch (pkg.packageType) {
+  PackageType.monthly => 'Monthly Pro',
+  PackageType.annual => 'Yearly Pro',
+  PackageType.lifetime => 'Lifetime Pro',
+  PackageType.weekly => 'Weekly Pro',
+  _ => cleanProductTitle(pkg.storeProduct.title),
+};
 
 // ─── Paywall screen ───────────────────────────────────────────────────────────
 
@@ -32,14 +78,34 @@ class PaywallScreen extends ConsumerStatefulWidget {
 class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   bool _isBusy = false;
   int _selectedIndex = 0;
+  bool _userSelected = false;
+
+  /// Annual is the recommended tier by default, regardless of what order
+  /// the dashboard happens to return monthly/annual/lifetime in — falls
+  /// back to the first package if no annual plan is configured.
+  int _defaultIndex(List<Package> packages) {
+    final annualIndex = packages.indexWhere(
+      (p) => p.packageType == PackageType.annual,
+    );
+    return annualIndex != -1 ? annualIndex : 0;
+  }
 
   Future<void> _purchase(Package package) async {
     setState(() => _isBusy = true);
     try {
       await ref.read(revenueCatServiceProvider).purchasePackage(package);
-      await ref
-          .read(analyticsServiceProvider)
-          .logPurchaseCompleted(package.storeProduct.identifier);
+      // The purchase itself already succeeded at this point — money
+      // charged, entitlement granted by RevenueCat. A failure logging it
+      // to analytics is not a purchase failure and must never be
+      // reported to the user as one, or block _onPurchaseSuccess below.
+      try {
+        await ref
+            .read(analyticsServiceProvider)
+            .logPurchaseCompleted(package.storeProduct.identifier);
+      } catch (_) {
+        // Best-effort — analytics failing here must never look like the
+        // purchase itself failed.
+      }
       ref.invalidate(hasActiveEntitlementProvider);
       if (!mounted) return;
       await _onPurchaseSuccess();
@@ -75,6 +141,13 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     final isGuest =
         ref.read(authRepositoryProvider).currentUser?.isAnonymous ?? false;
     if (!isGuest) {
+      // _restore already confirms success with "Restored ✅" — purchasing
+      // had no equivalent, silently popping with no feedback at all.
+      AppSnackBar.show(
+        context,
+        "You're Pro now 🎉",
+        type: SnackBarType.success,
+      );
       Navigator.of(context).pop();
       return;
     }
@@ -145,6 +218,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -168,124 +242,130 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           textMuted: textMuted,
           onRetry: () => ref.invalidate(_offeringsProvider),
         ),
-        data: (packages) => Stack(
-          children: [
-            // ── Scrollable content ─────────────────────────────────────────
-            CustomScrollView(
-              slivers: [
-                // Hero
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                    child: _HeroSection(
-                      isDark: isDark,
-                      accent: accent,
-                      textPrimary: textPrimary,
-                      textMuted: textMuted,
-                      surfaceColor: surfaceColor,
-                      borderColor: borderColor,
-                    ),
-                  ),
-                ),
-
-                // Comparison table
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                    child: _ComparisonTable(
-                      isDark: isDark,
-                      accent: accent,
-                      textPrimary: textPrimary,
-                      textMuted: textMuted,
-                      surfaceColor: surfaceColor,
-                      borderColor: borderColor,
-                    ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
-                  ),
-                ),
-
-                // Testimonials
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                    child: _Testimonials(
-                      isDark: isDark,
-                      accent: accent,
-                      textPrimary: textPrimary,
-                      textMuted: textMuted,
-                      surfaceColor: surfaceColor,
-                      borderColor: borderColor,
-                    ).animate().fadeIn(delay: 250.ms),
-                  ),
-                ),
-
-                // Guest warning
-                if (isGuest)
+        data: (packages) {
+          final effectiveIndex = _userSelected
+              ? _selectedIndex
+              : _defaultIndex(packages);
+          return Stack(
+            children: [
+              // ── Scrollable content ─────────────────────────────────────────
+              CustomScrollView(
+                slivers: [
+                  // Hero
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                      child: _GuestWarning().animate().fadeIn(delay: 300.ms),
-                    ),
-                  ),
-
-                // Package selector
-                if (packages.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: _PackageSelector(
-                        packages: packages,
-                        selectedIndex: _selectedIndex,
-                        onSelect: (i) => setState(() => _selectedIndex = i),
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                      child: _HeroSection(
                         isDark: isDark,
                         accent: accent,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         surfaceColor: surfaceColor,
                         borderColor: borderColor,
-                      ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.08),
+                      ),
                     ),
                   ),
 
-                // Guarantee badge
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
-                    child: _GuaranteeBadge(
-                      textMuted: textMuted,
-                      surfaceColor: surfaceColor,
-                      borderColor: borderColor,
-                    ).animate().fadeIn(delay: 380.ms),
+                  // Comparison table
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+                      child: _ComparisonTable(
+                        isDark: isDark,
+                        accent: accent,
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                        surfaceColor: surfaceColor,
+                        borderColor: borderColor,
+                      ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
+                    ),
                   ),
-                ),
 
-                // Bottom padding for sticky CTA
-                const SliverToBoxAdapter(child: SizedBox(height: 130)),
-              ],
-            ),
+                  // Guest warning
+                  if (isGuest)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                        child: _GuestWarning().animate().fadeIn(delay: 300.ms),
+                      ),
+                    ),
 
-            // ── Sticky CTA ─────────────────────────────────────────────────
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _StickyCta(
-                packages: packages,
-                selectedIndex: _selectedIndex,
-                isBusy: _isBusy,
-                isDark: isDark,
-                accent: accent,
-                textPrimary: textPrimary,
-                textMuted: textMuted,
-                bgColor: bgColor,
-                borderColor: borderColor,
-                onPurchase: packages.isEmpty
-                    ? null
-                    : () => _purchase(packages[_selectedIndex]),
-                onRestore: _restore,
+                  // Package selector
+                  if (packages.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        child: _PackageSelector(
+                          packages: packages,
+                          selectedIndex: effectiveIndex,
+                          onSelect: (i) => setState(() {
+                            _selectedIndex = i;
+                            _userSelected = true;
+                          }),
+                          isDark: isDark,
+                          accent: accent,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          surfaceColor: surfaceColor,
+                          borderColor: borderColor,
+                        ).animate().fadeIn(delay: 320.ms).slideY(begin: 0.08),
+                      ),
+                    ),
+
+                  // Guarantee badge
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+                      child: _GuaranteeBadge(
+                        textMuted: textMuted,
+                        surfaceColor: surfaceColor,
+                        borderColor: borderColor,
+                      ).animate().fadeIn(delay: 380.ms),
+                    ),
+                  ),
+
+                  // Bottom padding for the sticky CTA — this used to be a
+                  // flat 130, which only matched _StickyCta's actual
+                  // height on a device with no bottom system inset and no
+                  // trial-label row. On a 3-button-nav device, or whenever
+                  // a trial is offered, the CTA is taller than that and the
+                  // guarantee badge above ends up hidden behind it even
+                  // after scrolling all the way down. 190 covers the CTA's
+                  // tallest case (trial label + button + restore link +
+                  // its own paddings) and the bottom inset is added on top
+                  // since _StickyCta pads for it separately.
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 190 + MediaQuery.of(context).padding.bottom,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
+
+              // ── Sticky CTA ─────────────────────────────────────────────────
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _StickyCta(
+                  packages: packages,
+                  selectedIndex: effectiveIndex,
+                  isBusy: _isBusy,
+                  isDark: isDark,
+                  accent: accent,
+                  textPrimary: textPrimary,
+                  textMuted: textMuted,
+                  bgColor: bgColor,
+                  borderColor: borderColor,
+                  onPurchase: packages.isEmpty
+                      ? null
+                      : () => _purchase(packages[effectiveIndex]),
+                  onRestore: _restore,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -312,7 +392,11 @@ class _PaywallSkeleton extends StatelessWidget {
           children: [
             ShimmerCircle(size: 64, color: colors.border),
             const SizedBox(height: 20),
-            ShimmerBlock(height: 22, width: double.infinity, color: colors.border),
+            ShimmerBlock(
+              height: 22,
+              width: double.infinity,
+              color: colors.border,
+            ),
             const SizedBox(height: 10),
             ShimmerBlock(height: 14, width: 220, color: colors.border),
             const SizedBox(height: 28),
@@ -324,14 +408,26 @@ class _PaywallSkeleton extends StatelessWidget {
               children: List.generate(2, (i) {
                 return Expanded(
                   child: Padding(
-                    padding: EdgeInsets.only(left: i == 0 ? 0 : 6, right: i == 1 ? 0 : 6),
-                    child: ShimmerCard(colors: colors, height: 110, child: const SizedBox()),
+                    padding: EdgeInsets.only(
+                      left: i == 0 ? 0 : 6,
+                      right: i == 1 ? 0 : 6,
+                    ),
+                    child: ShimmerCard(
+                      colors: colors,
+                      height: 110,
+                      child: const SizedBox(),
+                    ),
                   ),
                 );
               }),
             ),
             const SizedBox(height: 20),
-            ShimmerBlock(height: 40, width: double.infinity, radius: 10, color: colors.shimmer),
+            ShimmerBlock(
+              height: 40,
+              width: double.infinity,
+              radius: 10,
+              color: colors.shimmer,
+            ),
           ],
         );
       },
@@ -461,12 +557,20 @@ class _ComparisonTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // (label, freeValue, proValue) — String or bool
+    // "Cloud sync" used to be listed here as Pro-only, but it's actually
+    // available to any signed-in (non-guest) user regardless of
+    // entitlement — habitRepositoryProvider picks Firestore vs Drift
+    // purely off auth state. Replaced with backfill history, which is
+    // genuinely Pro-gated (see HabitDetailScreen._logPastDay).
+    // "Priority support" used to be listed here too, but nothing in the
+    // app actually differentiates support by entitlement — Settings'
+    // "Contact support" is the same flow for every user.
     final rows = <(String, Object, Object)>[
       ('Habits', '3 max', 'Unlimited'),
       ('Home screen widget', false, true),
-      ('Cloud sync', false, true),
+      ('Backfill history', 'Last 7 days', 'Unlimited'),
+      ('Reminders', 'Daily', 'Smart alerts'),
       ('Analytics & insights', false, true),
-      ('Priority support', false, true),
     ];
 
     return Container(
@@ -599,139 +703,6 @@ class _ComparisonTable extends StatelessWidget {
   }
 }
 
-// ─── Testimonials ─────────────────────────────────────────────────────────────
-
-class _Testimonials extends StatelessWidget {
-  const _Testimonials({
-    required this.isDark,
-    required this.accent,
-    required this.textPrimary,
-    required this.textMuted,
-    required this.surfaceColor,
-    required this.borderColor,
-  });
-  final bool isDark;
-  final Color accent;
-  final Color textPrimary;
-  final Color textMuted;
-  final Color surfaceColor;
-  final Color borderColor;
-
-  @override
-  Widget build(BuildContext context) {
-    const reviews = [
-      (
-        'Zara K.',
-        'ZK',
-        Color(0xFF9EE000),
-        '"Finally a habit app that doesn\'t feel like homework. The streak widget on my home screen is everything."',
-      ),
-      (
-        'Marcus T.',
-        'MT',
-        Color(0xFF00C2FF),
-        '"Upgraded after 3 days. The unlimited habits alone are worth it — I track 9 things now."',
-      ),
-      (
-        'Priya S.',
-        'PS',
-        Color(0xFFE040FB),
-        '"Cloud sync saved me when I switched phones. Didn\'t lose a single day of my 60-day streak."',
-      ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'What people are saying',
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 128,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: reviews.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) {
-              final r = reviews[i];
-              return Container(
-                width: 238,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: surfaceColor,
-                  border: Border.all(color: borderColor, width: 1),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: r.$3.withValues(alpha: 0.18),
-                          ),
-                          child: Center(
-                            child: Text(
-                              r.$2,
-                              style: TextStyle(
-                                color: r.$3,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r.$1,
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Text('⭐⭐⭐⭐⭐', style: TextStyle(fontSize: 8)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: Text(
-                        r.$4,
-                        style: TextStyle(
-                          color: textMuted,
-                          fontSize: 11,
-                          height: 1.45,
-                        ),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // ─── Guest warning ────────────────────────────────────────────────────────────
 
 class _GuestWarning extends StatelessWidget {
@@ -826,7 +797,8 @@ class _PackageSelector extends StatelessWidget {
           final i = entry.key;
           final pkg = entry.value;
           final isSelected = i == selectedIndex;
-          final isFirst = i == 0;
+          final isBestValue = pkg.packageType == PackageType.annual;
+          final isLifetime = isLifetimePackage(pkg);
           final trialLabel = _trialLabel(pkg);
 
           return Padding(
@@ -872,7 +844,7 @@ class _PackageSelector extends StatelessWidget {
                             children: [
                               Flexible(
                                 child: Text(
-                                  pkg.storeProduct.title,
+                                  planTitle(pkg),
                                   style: TextStyle(
                                     color: textPrimary,
                                     fontWeight: FontWeight.w700,
@@ -880,7 +852,7 @@ class _PackageSelector extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (isFirst) ...[
+                              if (isBestValue || isLifetime) ...[
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -889,14 +861,18 @@ class _PackageSelector extends StatelessWidget {
                                   ),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(5),
-                                    color: accent,
+                                    color: isLifetime
+                                        ? AppColors.premiumGold
+                                        : accent,
                                   ),
                                   child: Text(
-                                    'BEST VALUE',
+                                    isLifetime ? 'PAY ONCE' : 'BEST VALUE',
                                     style: TextStyle(
-                                      color: isDark
+                                      color: isLifetime
                                           ? Colors.black
-                                          : Colors.white,
+                                          : (isDark
+                                                ? Colors.black
+                                                : Colors.white),
                                       fontSize: 8,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 0.4,
@@ -916,29 +892,27 @@ class _PackageSelector extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(5),
-                                color: const Color(
-                                  0xFF22C55E,
-                                ).withValues(alpha: 0.15),
+                                color: AppColors.success.withValues(
+                                  alpha: 0.15,
+                                ),
                                 border: Border.all(
-                                  color: const Color(
-                                    0xFF22C55E,
-                                  ).withValues(alpha: 0.4),
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.4,
+                                  ),
                                   width: 1,
                                 ),
                               ),
                               child: Text(
                                 '🎁 $trialLabel',
                                 style: const TextStyle(
-                                  color: Color(0xFF22C55E),
+                                  color: AppColors.success,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                          ] else if (pkg
-                              .storeProduct
-                              .description
-                              .isNotEmpty) ...[
+                          ] else if (!isLifetime &&
+                              pkg.storeProduct.description.isNotEmpty) ...[
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
@@ -961,26 +935,47 @@ class _PackageSelector extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         if (trialLabel != null)
-                          Text(
+                          const Text(
                             'FREE',
                             style: TextStyle(
-                              color: const Color(0xFF22C55E),
+                              color: AppColors.success,
                               fontWeight: FontWeight.w900,
                               fontSize: 17,
                             ),
                           )
                         else
+                          Text.rich(
+                            TextSpan(
+                              text: pkg.storeProduct.priceString,
+                              style: TextStyle(
+                                color: isSelected ? accent : textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 17,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: pricePeriodSuffix(pkg),
+                                  style: TextStyle(
+                                    color: textMuted,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (isLifetime)
                           Text(
-                            pkg.storeProduct.priceString,
+                            'one-time',
                             style: TextStyle(
-                              color: isSelected ? accent : textPrimary,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 17,
+                              color: textMuted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         if (trialLabel != null)
                           Text(
-                            'then ${pkg.storeProduct.priceString}',
+                            'then ${pkg.storeProduct.priceString}${pricePeriodSuffix(pkg)}',
                             style: TextStyle(
                               color: textMuted,
                               fontSize: 10,
@@ -1109,9 +1104,9 @@ class _StickyCta extends StatelessWidget {
           // Trial sub-label above button
           if (hasTrial) ...[
             Text(
-              '🎁 $trialDuration free, then ${selectedPkg!.storeProduct.priceString}',
+              '🎁 $trialDuration free, then ${selectedPkg!.storeProduct.priceString}${pricePeriodSuffix(selectedPkg)}',
               style: const TextStyle(
-                color: Color(0xFF22C55E),
+                color: AppColors.success,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -1147,7 +1142,9 @@ class _StickyCta extends StatelessWidget {
                           ? 'Try free for $trialDuration'
                           : selectedPkg == null
                           ? 'Get Pro'
-                          : 'Get Pro · ${selectedPkg.storeProduct.priceString}',
+                          : isLifetimePackage(selectedPkg)
+                          ? 'Get Pro · ${selectedPkg.storeProduct.priceString} one-time'
+                          : 'Get Pro · ${selectedPkg.storeProduct.priceString}${pricePeriodSuffix(selectedPkg)}',
                       style: TextStyle(
                         color: buttonFg,
                         fontWeight: FontWeight.w800,

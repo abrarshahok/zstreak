@@ -4,6 +4,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,7 +16,15 @@ import 'features/onboarding/application/onboarding_providers.dart';
 import 'features/widgets/data/widget_background_callback.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+
+  // Holds the native launch screen up through Firebase Auth resolving and
+  // (for a signed-in user) the Firestore profile sync in AuthGate, instead
+  // of handing off early to a separate Flutter-rendered loading screen.
+  // AuthGate calls FlutterNativeSplash.remove() once it knows the real
+  // destination, so startup is splash -> real screen with nothing in
+  // between.
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // Draw Flutter content behind the status bar and navigation bar so the app
   // feels truly full-screen on physical devices. Each screen controls its own
@@ -46,6 +55,21 @@ Future<void> main() async {
   // isolate without opening the app (spec Section 2/12).
   await HomeWidget.registerInteractivityCallback(widgetInteractivityCallback);
 
+  // Resolved *before* runApp() rather than reactively via setState once the
+  // app is already showing — MaterialApp's Navigator only ever consults
+  // `home` once, to build its initial '/' route, when it first mounts.
+  // Changing `home` on a later rebuild (which is all a post-launch setState
+  // could do) doesn't retroactively replace that already-built route, so
+  // the widget-configure screen never actually appeared; the app just sat
+  // on its normal AuthGate route while home_widget's pending result stayed
+  // unresolved. Deciding this up front means the very first build already
+  // has the right answer.
+  final configureIdString =
+      await HomeWidget.initiallyLaunchedFromHomeWidgetConfigure();
+  final configuringWidgetId = configureIdString == null
+      ? null
+      : int.tryParse(configureIdString);
+
   runApp(
     ProviderScope(
       overrides: [
@@ -55,7 +79,7 @@ Future<void> main() async {
         ),
         themeModeProvider.overrideWith((ref) => readThemeModeFromPrefs(prefs)),
       ],
-      child: const ZStreakApp(),
+      child: ZStreakApp(configuringWidgetId: configuringWidgetId),
     ),
   );
 }

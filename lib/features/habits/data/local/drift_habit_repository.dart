@@ -125,6 +125,16 @@ class DriftHabitRepository implements HabitRepository {
     required bool completed,
     String? note,
   }) async {
+    // The check-in row write and the streak recompute below both need to
+    // see each other's effects atomically — two setCheckIn calls for the
+    // same habit close together (e.g. a rapid double-tap, or two days
+    // toggled back-to-back in the calendar grid) previously ran the row
+    // write inside its own transaction but _recalculateStreak's
+    // read-then-max-write of longestStreak afterward, in a *separate*,
+    // unguarded transaction: call A could read the pre-B longestStreak,
+    // then B commits a higher value, then A's stale max() write overwrites
+    // it back down. One transaction around both makes SQLite's own
+    // locking serialize overlapping calls instead.
     await _db.transaction(() async {
       final existing =
           await (_db.select(_db.checkIns)
@@ -137,10 +147,7 @@ class DriftHabitRepository implements HabitRepository {
             _db.checkIns,
           )..where((c) => c.id.equals(existing.id))).go();
         }
-        return;
-      }
-
-      if (existing != null) {
+      } else if (existing != null) {
         await (_db.update(
           _db.checkIns,
         )..where((c) => c.id.equals(existing.id))).write(
@@ -164,13 +171,61 @@ class DriftHabitRepository implements HabitRepository {
               ),
             );
       }
+
+      await _recalculateStreak(habitId);
     });
-    await _recalculateStreak(habitId);
+  }
+
+  @override
+  Future<bool> toggleCheckIn({
+    required String habitId,
+    required String date,
+  }) {
+    return _db.transaction(() async {
+      final existing =
+          await (_db.select(_db.checkIns)
+                ..where((c) => c.habitId.equals(habitId) & c.date.equals(date)))
+              .getSingleOrNull();
+      final newCompleted = !(existing?.completed ?? false);
+
+      if (!newCompleted) {
+        if (existing != null) {
+          await (_db.delete(
+            _db.checkIns,
+          )..where((c) => c.id.equals(existing.id))).go();
+        }
+      } else if (existing != null) {
+        await (_db.update(
+          _db.checkIns,
+        )..where((c) => c.id.equals(existing.id))).write(
+          CheckInsCompanion(
+            completed: const Value(true),
+            loggedAt: Value(DateTime.now()),
+          ),
+        );
+      } else {
+        await _db
+            .into(_db.checkIns)
+            .insert(
+              CheckInsCompanion.insert(
+                id: _uuid.v4(),
+                habitId: habitId,
+                date: date,
+                completed: const Value(true),
+                loggedAt: DateTime.now(),
+              ),
+            );
+      }
+
+      await _recalculateStreak(habitId);
+      return newCompleted;
+    });
   }
 
   /// Recomputes current/longest streak from full check-in history and
   /// persists them (spec Section 5a) — run on every check-in write, never
-  /// on read, so screens can just read the stored fields.
+  /// on read, so screens can just read the stored fields. Always called
+  /// from within [setCheckIn]'s transaction above.
   Future<void> _recalculateStreak(String habitId) async {
     final habit = _toDomain(
       await (_db.select(

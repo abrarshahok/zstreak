@@ -1,9 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Grown from the original 180x70dp (3x1 cells) to fit the mini
+     contribution grid HabitWidgetProvider now renders below the header —
+     that plain a card was too cramped to show it at a legible size.
+
+     minHeight is tuned against the *classic* cell-count formula older/
+     non-targetCellHeight-aware launchers (e.g. Pixel/Nexus launcher)
+     still use: cells = ceil((minHeight + 2) / 74). Confirmed via a live
+     `uiautomator dump`: widget_content (header+grid) measures ~146dp
+     tall, but the previous minHeight="150dp" resolves to ceil(152/74)=3
+     grid cells — a whole extra ~113dp row of reserved space nothing
+     fills — for the sake of being 4dp over the ceil(148/74)=2 threshold.
+     146dp sits right at that 2-cell boundary. targetCellWidth/Height are
+     left as the "2 cells" signal for launchers that DO read them
+     directly (Android 12+); this only fixes the ones that don't.
+
+     resizeMode allows both axes again: HabitWidgetProvider's grid now
+     grows its row count to fill however tall the widget actually is
+     (see renderGridBitmap), so a taller placement fills with more rows
+     instead of leaving dead space — no need to cap height to prevent
+     that anymore.
+
+     minHeight dropped further, now 75dp — below the header+padding+
+     margin alone (~78dp), let alone a full 7-row grid (~146dp needed
+     total). This number is only a hint for the launcher's default
+     cell-count math (unchanged at 2 cells either way — see above) and
+     the actual rendered content still needs ~146dp to show without the
+     dynamic row count in HabitWidgetProvider shrinking below MIN_ROWS=7
+     and letterboxing. If a launcher ever did grant something this
+     short, the grid would end up squeezed rather than absent. -->
+
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="180dp"
-    android:minHeight="70dp"
-    android:targetCellWidth="3"
-    android:targetCellHeight="1"
+    android:minWidth="250dp"
+    android:minHeight="75dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/habit_widget"
     android:configure="com.zstreak.app.MainActivity"

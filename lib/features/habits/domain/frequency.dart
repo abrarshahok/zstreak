@@ -32,14 +32,15 @@ sealed class FrequencyConfig {
 
   Map<String, dynamic> toJson();
 
-  static FrequencyConfig fromJson(FrequencyType type, Map<String, dynamic> json) {
+  static FrequencyConfig fromJson(
+    FrequencyType type,
+    Map<String, dynamic> json,
+  ) {
     switch (type) {
       case FrequencyType.daily:
         return const DailyConfig();
       case FrequencyType.weekdays:
-        return WeekdaysConfig(
-          weekdays: (json['weekdays'] as List).cast<int>(),
-        );
+        return WeekdaysConfig(weekdays: (json['weekdays'] as List).cast<int>());
       case FrequencyType.xPerWeek:
         return XPerWeekConfig(
           timesPerWeek: json['timesPerWeek'] as int,

@@ -124,6 +124,14 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
     setState(() => _isBusy = true);
     try {
       await action();
+    } catch (_) {
+      // Without this, anything action() throws beyond the
+      // FirebaseAuthException cases already handled inline (e.g. _finish's
+      // migrate() failing on a flaky Firestore batch commit) went
+      // completely unhandled — no snackbar, no feedback at all, even
+      // though by that point linkWithGoogle() may have already succeeded
+      // and left the account non-anonymous with an incomplete migration.
+      _showError(AppCopy.errorGeneric);
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -160,6 +168,7 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -180,94 +189,101 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Icon — flat rounded container ─────────────────────────
-              Center(
-                child:
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: surfaceColor,
-                        border: Border.all(color: borderColor, width: 1),
+        // Was a plain Padding+Column relying on the body's own height to
+        // center things — no scroll fallback, so a small device or a
+        // large system font scale would overflow instead of scrolling
+        // (same pattern account_status_gate.dart's _AccountLockedScreen
+        // already guards against).
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Icon — flat rounded container ─────────────────────────
+                Center(
+                  child:
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          color: surfaceColor,
+                          border: Border.all(color: borderColor, width: 1),
+                        ),
+                        child: const Center(
+                          child: Text('🔐', style: TextStyle(fontSize: 35)),
+                        ),
+                      ).animate().scale(
+                        begin: const Offset(0.7, 0.7),
+                        end: const Offset(1.0, 1.0),
+                        duration: 500.ms,
+                        curve: Curves.elasticOut,
                       ),
-                      child: const Center(
-                        child: Text('🔐', style: TextStyle(fontSize: 35)),
-                      ),
-                    ).animate().scale(
-                      begin: const Offset(0.7, 0.7),
-                      end: const Offset(1.0, 1.0),
-                      duration: 500.ms,
-                      curve: Curves.elasticOut,
-                    ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Headline ──────────────────────────────────────────────
-              Text(
-                    'Save your streak',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 25,
-                      height: 1.2,
-                    ),
-                  )
-                  .animate(delay: 80.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.08, end: 0),
-
-              const SizedBox(height: 10),
-
-              Text(
-                    'Link an account so your habits sync across devices and never expire.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: textMuted,
-                      fontSize: 13,
-                      height: 1.5,
-                    ),
-                  )
-                  .animate(delay: 140.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.08, end: 0),
-
-              const SizedBox(height: 40),
-
-              // ── Google button — flat, no glow ─────────────────────────
-              _FlatButton(
-                    label: AppCopy.linkWithGoogle,
-                    color: accent,
-                    fgColor: buttonFg,
-                    isBusy: _isBusy,
-                    onTap: _isBusy ? null : _linkGoogle,
-                  )
-                  .animate(delay: 200.ms)
-                  .fadeIn(duration: 350.ms)
-                  .slideY(begin: 0.08, end: 0),
-
-              const SizedBox(height: 24),
-
-              // ── Export data ───────────────────────────────────────────
-              Center(
-                child: TextButton(
-                  onPressed: _isBusy
-                      ? null
-                      : () => ref.read(dataExporterProvider).shareCsv(),
-                  child: Text(
-                    AppCopy.exportMyData,
-                    style: TextStyle(color: textMuted, fontSize: 12),
-                  ),
                 ),
-              ).animate(delay: 320.ms).fadeIn(duration: 350.ms),
-            ],
+                const SizedBox(height: 24),
+
+                // ── Headline ──────────────────────────────────────────────
+                Text(
+                      'Save your streak',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 25,
+                        height: 1.2,
+                      ),
+                    )
+                    .animate(delay: 80.ms)
+                    .fadeIn(duration: 350.ms)
+                    .slideY(begin: 0.08, end: 0),
+
+                const SizedBox(height: 10),
+
+                Text(
+                      'Link an account so your habits sync across devices and never expire.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    )
+                    .animate(delay: 140.ms)
+                    .fadeIn(duration: 350.ms)
+                    .slideY(begin: 0.08, end: 0),
+
+                const SizedBox(height: 40),
+
+                // ── Google button — flat, no glow ─────────────────────────
+                _FlatButton(
+                      label: AppCopy.linkWithGoogle,
+                      color: accent,
+                      fgColor: buttonFg,
+                      isBusy: _isBusy,
+                      onTap: _isBusy ? null : _linkGoogle,
+                    )
+                    .animate(delay: 200.ms)
+                    .fadeIn(duration: 350.ms)
+                    .slideY(begin: 0.08, end: 0),
+
+                const SizedBox(height: 24),
+
+                // ── Export data ───────────────────────────────────────────
+                Center(
+                  child: TextButton(
+                    onPressed: _isBusy
+                        ? null
+                        : () => ref.read(dataExporterProvider).shareCsv(),
+                    child: Text(
+                      AppCopy.exportMyData,
+                      style: TextStyle(color: textMuted, fontSize: 12),
+                    ),
+                  ),
+                ).animate(delay: 320.ms).fadeIn(duration: 350.ms),
+              ],
+            ),
           ),
         ),
       ),

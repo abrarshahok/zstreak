@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -28,13 +29,60 @@ class WidgetConfigureScreen extends ConsumerWidget {
 
   final int widgetId;
 
-  Future<void> _choose(WidgetRef ref, String habitId) async {
+  Future<void> _choose(
+    BuildContext context,
+    WidgetRef ref,
+    String habitId,
+  ) async {
+    // setWidgetHabit() only persists the widget-instance→habit mapping —
+    // it never writes the habit's own display fields (name/emoji/streak/
+    // completed) or premium_active, both of which are otherwise only
+    // ever written as a side effect of a *later* check-in/edit on that
+    // specific habit. Without this, a freshly-placed widget for a habit
+    // that hasn't been touched since install renders as either the
+    // locked "Subscription expired" state (premium_active defaults to
+    // false) or generic placeholder text ("⭐ Habit · 0 day streak"),
+    // even though the widget-to-habit mapping itself is correct.
+    final repo = ref.read(habitRepositoryProvider);
+    final habit = await repo.getHabitById(habitId);
+    if (habit != null) {
+      final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+      await ref
+          .read(widgetSyncServiceProvider)
+          .syncSingleHabit(
+            habit,
+            (id, date) => repo.watchCheckIn(habitId: id, date: date).first,
+            (id) => repo.watchHabitCheckIns(id).first,
+            isPremium: isPremium,
+          );
+    }
     await ref.read(widgetSyncServiceProvider).setWidgetHabit(widgetId, habitId);
-    await HomeWidget.finishHomeWidgetConfigure();
+
+    // Two different ways this screen shows up, and each needs a different
+    // "done": as the Activity's own home (a manual OS widget-tray add via
+    // android:configure), where finishHomeWidgetConfigure() finishes that
+    // Activity so the widget host gets its RESULT_OK — or pushed as a
+    // normal route (Settings' "Add home screen widget" button, via the
+    // pin-confirmed callback in app.dart), where finishHomeWidgetConfigure
+    // is a silent no-op (its native guard only fires for the configure
+    // intent's own action) and this needs to just pop back instead.
+    if (!context.mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      await HomeWidget.finishHomeWidgetConfigure();
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // This screen is main.dart's `home` for the entire lifetime of an
+    // app launch that started from the widget's configure intent — AuthGate
+    // (the only other place that calls this) never mounts on that launch
+    // path, so without this the native splash held by preserve() would
+    // never be released.
+    FlutterNativeSplash.remove();
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? AppColors.background : AppColors.backgroundLight;
     final textPrimary = isDark
@@ -45,10 +93,54 @@ class WidgetConfigureScreen extends ConsumerWidget {
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
 
-    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
+    // This screen can be main.dart's very first `home` on a cold start
+    // from the widget's configure intent, before RevenueCat has ever
+    // resolved a customer info — valueOrNull collapsing that "still
+    // loading" state to false used to flash the Pro-lock screen at a
+    // real Pro user before flipping to the actual habit picker once the
+    // entitlement check caught up.
+    final entitlement = ref.watch(hasActiveEntitlementProvider);
+    final isPro = entitlement.valueOrNull ?? false;
+    final backButton = Navigator.of(context).canPop()
+        ? IconButton(
+            icon: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 18,
+              color: textPrimary,
+            ),
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).pop(),
+          )
+        : null;
+
+    if (entitlement.isLoading && !entitlement.hasValue) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        appBar: AppBar(
+          backgroundColor: bgColor,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: backButton,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     if (!isPro) {
       return Scaffold(
         backgroundColor: bgColor,
+        // Previously had no AppBar at all — reachable pushed as a normal
+        // route (Settings' "Add home screen widget"), where a non-Pro
+        // user had no way to dismiss this except tapping "Unlock Pro" or
+        // an OS back gesture.
+        appBar: AppBar(
+          backgroundColor: bgColor,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: backButton,
+        ),
         body: SafeArea(
           child: Center(
             child: Padding(
@@ -130,16 +222,7 @@ class WidgetConfigureScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: Navigator.of(context).canPop()
-            ? IconButton(
-                icon: Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  size: 18,
-                  color: textPrimary,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              )
-            : null,
+        leading: backButton,
         title: Text(
           'Choose habit for widget',
           style: TextStyle(
@@ -179,7 +262,7 @@ class WidgetConfigureScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final habit = list[index];
               return GestureDetector(
-                onTap: () => _choose(ref, habit.id),
+                onTap: () => _choose(context, ref, habit.id),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,

@@ -63,6 +63,7 @@ dependencies:
   flutter_svg: ^2.3.0
   reorderable_grid_view: ^2.2.8
   app_settings: ^9.0.0
+  flutter_native_splash: ^2.4.6
 dev_dependencies:
   flutter_test:
     sdk: flutter

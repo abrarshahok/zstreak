@@ -9,6 +9,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
+import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
 import '../../monetization/application/entitlement_providers.dart';
@@ -38,22 +39,6 @@ enum _ViewMode { list, grid }
 final _homeFocusModeProvider = StateProvider<_FocusMode>((_) => _FocusMode.all);
 
 enum _FocusMode { all, today }
-
-// ─── Scheduling helper ────────────────────────────────────────────────────────
-
-/// Returns true if [habit] is scheduled for [weekday] (ISO 1=Mon..7=Sun).
-bool _isScheduledForDay(Habit habit, int weekday) {
-  switch (habit.frequencyType) {
-    case FrequencyType.daily:
-      return true;
-    case FrequencyType.weekdays:
-      final cfg = habit.frequencyConfig as WeekdaysConfig;
-      return cfg.weekdays.contains(weekday);
-    case FrequencyType.xPerWeek:
-      // xPerWeek habits are always eligible on any day of the week.
-      return true;
-  }
-}
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
@@ -89,7 +74,15 @@ class HomeScreen extends ConsumerWidget {
                 ref.read(_homeFocusModeProvider.notifier).state = mode,
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 96),
+            // Flat 96 (sized to clear the FAB) used to sit partly behind
+            // a device's system nav bar instead of being visible space
+            // above it — same fix as HabitDetailScreen's bottom padding.
+            padding: EdgeInsets.fromLTRB(
+              0,
+              0,
+              0,
+              96 + MediaQuery.of(context).padding.bottom,
+            ),
             sliver: habits.when(
               loading: () =>
                   SliverToBoxAdapter(child: _HabitListSkeleton(isDark: isDark)),
@@ -265,9 +258,17 @@ class _HabitListSkeleton extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          ShimmerBlock(height: 13, width: double.infinity, color: colors.border),
+                          ShimmerBlock(
+                            height: 13,
+                            width: double.infinity,
+                            color: colors.border,
+                          ),
                           const SizedBox(height: 8),
-                          ShimmerBlock(height: 10, width: 80, color: colors.border),
+                          ShimmerBlock(
+                            height: 10,
+                            width: 80,
+                            color: colors.border,
+                          ),
                         ],
                       ),
                     ),
@@ -351,7 +352,7 @@ class _TodayFocusSliver extends ConsumerWidget {
 
     // Filter to habits scheduled for today.
     final todayHabits = habits
-        .where((h) => _isScheduledForDay(h, today.weekday))
+        .where((h) => h.isScheduledOnWeekday(today.weekday))
         .toList();
 
     // Watch check-ins for all today's habits to compute done count.
@@ -658,15 +659,32 @@ class _ReorderableHabitListState extends ConsumerState<_ReorderableHabitList> {
 
   void _onReorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex -= 1;
+    final previousOrder = List<Habit>.from(_local);
     setState(() {
       _reordering = true;
       final moved = _local.removeAt(oldIndex);
       _local.insert(newIndex, moved);
     });
-    // Persist in background.
+    // Persist in background — previously fully fire-and-forget, so a
+    // failed write (offline, permission error, etc.) left the optimistic
+    // _local order on screen with nothing actually saved; it would look
+    // like the list silently un-reordered itself on the next app launch,
+    // with no indication anything had gone wrong in the meantime.
     ref
         .read(habitRepositoryProvider)
-        .reorderHabits(_local.map((h) => h.id).toList());
+        .reorderHabits(_local.map((h) => h.id).toList())
+        .catchError((e) {
+          if (!mounted) return;
+          setState(() {
+            _local = previousOrder;
+            _reordering = false;
+          });
+          AppSnackBar.show(
+            context,
+            'Could not save new order',
+            type: SnackBarType.error,
+          );
+        });
     // Clear the guard after the stream has had time to settle.
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _reordering = false);
@@ -736,14 +754,29 @@ class _ReorderableHabitGridState extends ConsumerState<_ReorderableHabitGrid> {
   }
 
   void _onReorder(int oldIndex, int newIndex) {
+    final previousOrder = List<Habit>.from(_local);
     setState(() {
       _reordering = true;
       final moved = _local.removeAt(oldIndex);
       _local.insert(newIndex, moved);
     });
+    // See the matching comment in _ReorderableHabitListState._onReorder —
+    // same fire-and-forget-with-no-failure-feedback gap.
     ref
         .read(habitRepositoryProvider)
-        .reorderHabits(_local.map((h) => h.id).toList());
+        .reorderHabits(_local.map((h) => h.id).toList())
+        .catchError((e) {
+          if (!mounted) return;
+          setState(() {
+            _local = previousOrder;
+            _reordering = false;
+          });
+          AppSnackBar.show(
+            context,
+            'Could not save new order',
+            type: SnackBarType.error,
+          );
+        });
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _reordering = false);
     });
@@ -820,6 +853,7 @@ class HabitGridCard extends ConsumerWidget {
     final currentStreak =
         streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
     final isOnFire = currentStreak >= 7;
+    final isScheduledToday = habit.isScheduledOnWeekday(DateTime.now().weekday);
 
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
@@ -888,15 +922,22 @@ class HabitGridCard extends ConsumerWidget {
                     ],
                   ),
                   const Spacer(),
+                  // Disabled on days this habit isn't scheduled for (e.g. a
+                  // Sunday for a Mon/Wed/Fri habit).
                   Semantics(
-                    label: isDone
+                    label: !isScheduledToday
+                        ? '${habit.name}, not scheduled today'
+                        : isDone
                         ? '${habit.name}, done today, tap to undo'
                         : '${habit.name}, mark done today',
                     button: true,
                     child: _GridCheckInToggle(
                       isDone: isDone,
                       color: accentColor,
-                      onTap: () => _toggle(context, ref, today, isDone),
+                      enabled: isScheduledToday,
+                      onTap: isScheduledToday
+                          ? () => _toggle(context, ref, today, isDone)
+                          : null,
                     ),
                   ),
                 ],
@@ -1138,11 +1179,13 @@ class _GridCheckInToggle extends StatefulWidget {
     required this.isDone,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   final bool isDone;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   @override
   State<_GridCheckInToggle> createState() => _GridCheckInToggleState();
@@ -1196,37 +1239,40 @@ class _GridCheckInToggleState extends State<_GridCheckInToggle>
         : Colors.black.withValues(alpha: 0.15);
     final checkColor = contrastForeground(widget.color);
 
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return Transform.scale(
-            scale: widget.isDone ? _scale.value : 1.0,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.isDone ? widget.color : Colors.transparent,
-                border: Border.all(
-                  color: widget.isDone ? widget.color : borderColor,
-                  width: 1.5,
+    return Opacity(
+      opacity: widget.enabled ? 1.0 : 0.35,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return Transform.scale(
+              scale: widget.isDone ? _scale.value : 1.0,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isDone ? widget.color : Colors.transparent,
+                  border: Border.all(
+                    color: widget.isDone ? widget.color : borderColor,
+                    width: 1.5,
+                  ),
                 ),
+                child: widget.isDone
+                    ? Icon(Icons.check_rounded, color: checkColor, size: 16)
+                    : Icon(
+                        Icons.add_rounded,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.25)
+                            : Colors.black.withValues(alpha: 0.2),
+                        size: 14,
+                      ),
               ),
-              child: widget.isDone
-                  ? Icon(Icons.check_rounded, color: checkColor, size: 16)
-                  : Icon(
-                      Icons.add_rounded,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.25)
-                          : Colors.black.withValues(alpha: 0.2),
-                      size: 14,
-                    ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1255,6 +1301,9 @@ class _HomeAppBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(userProfileProvider);
     final firstName = profile.firstName;
+    // Loading/error both read as "not Pro" — same safe default the rest
+    // of Home already uses for the free-tier limit check.
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
     final hour = DateTime.now().hour;
     final greeting = hour < 12
@@ -1331,6 +1380,9 @@ class _HomeAppBar extends ConsumerWidget {
                               : Icons.view_list_rounded,
                           onPressed: onToggleView,
                           isDark: isDark,
+                          tooltip: viewMode == _ViewMode.list
+                              ? 'Switch to grid view'
+                              : 'Switch to list view',
                         ),
                         _IconBtn(
                           icon: Icons.archive_outlined,
@@ -1340,6 +1392,7 @@ class _HomeAppBar extends ConsumerWidget {
                             ),
                           ),
                           isDark: isDark,
+                          tooltip: 'Archived habits',
                         ),
                         _IconBtn(
                           icon: Icons.settings_outlined,
@@ -1349,37 +1402,60 @@ class _HomeAppBar extends ConsumerWidget {
                             ),
                           ),
                           isDark: isDark,
+                          tooltip: 'Settings',
                         ),
                       ],
                     ),
 
-                    // ── Focus mode toggle ──────────────────────────────
+                    // Paywall was previously reachable only from deep
+                    // inside Settings — this surfaces it directly on
+                    // Home, right under the icon row rather than
+                    // crowding it (which pushed the greeting into an
+                    // early ellipsis). Hidden once purchased since
+                    // there's nothing left to upsell.
+                    // ── Focus mode toggle (+ PRO badge, same row —
+                    // sharing this row's height instead of adding one) ──
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10, top: 6),
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: surface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: border, width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _FocusTab(
-                              label: 'All',
-                              selected: focusMode == _FocusMode.all,
-                              isDark: isDark,
-                              onTap: () => onToggleFocus(_FocusMode.all),
+                      child: Row(
+                        children: [
+                          Container(
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: surface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: border, width: 1),
                             ),
-                            _FocusTab(
-                              label: 'Today',
-                              selected: focusMode == _FocusMode.today,
-                              isDark: isDark,
-                              onTap: () => onToggleFocus(_FocusMode.today),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _FocusTab(
+                                  label: 'All',
+                                  selected: focusMode == _FocusMode.all,
+                                  isDark: isDark,
+                                  onTap: () => onToggleFocus(_FocusMode.all),
+                                ),
+                                _FocusTab(
+                                  label: 'Today',
+                                  selected: focusMode == _FocusMode.today,
+                                  isDark: isDark,
+                                  onTap: () => onToggleFocus(_FocusMode.today),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Paywall was previously reachable only from
+                          // deep inside Settings — this surfaces it
+                          // directly on Home without adding its own row.
+                          // Hidden once purchased since there's nothing
+                          // left to upsell.
+                          if (!isPro) ...[
+                            const Spacer(),
+                            _ProBadge(
+                              onTap: () => navigateToPaywall(context, ref),
                             ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   ],
@@ -1463,16 +1539,58 @@ class _FocusTab extends StatelessWidget {
 
 // ─── Icon Button ──────────────────────────────────────────────────────────────
 
+class _ProBadge extends StatelessWidget {
+  const _ProBadge({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 18,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: AppColors.premiumGold.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: AppColors.premiumGold.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.bolt_rounded, size: 10, color: AppColors.premiumGold),
+            const SizedBox(width: 2),
+            Text(
+              'PRO',
+              style: TextStyle(
+                color: AppColors.premiumGold,
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _IconBtn extends StatelessWidget {
   const _IconBtn({
     required this.icon,
     required this.onPressed,
     required this.isDark,
+    required this.tooltip,
   });
 
   final IconData icon;
   final VoidCallback onPressed;
   final bool isDark;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -1480,9 +1598,18 @@ class _IconBtn extends StatelessWidget {
     return IconButton(
       icon: Icon(icon, size: 20, color: color),
       onPressed: onPressed,
-      splashRadius: 20,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      tooltip: tooltip,
+      // Material 3's IconButton reserves a 48x48 tap target no matter
+      // what the constraints below say unless both density AND tap
+      // target size are overridden — that reserved space is what read
+      // as "too much space between the icons".
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      splashRadius: 16,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
     );
   }
 }
@@ -1506,11 +1633,23 @@ class _StreakSummaryBar extends ConsumerWidget {
         ref.watch(streakDetailProvider(h)).valueOrNull?.currentStreak ??
         h.currentStreak;
 
-    final totalStreaks = habits.fold<int>(
-      0,
-      (sum, h) => sum + liveStreak(h),
-    );
-    final doneToday = habits.where((h) => liveStreak(h) > 0).length;
+    final totalStreaks = habits.fold<int>(0, (sum, h) => sum + liveStreak(h));
+    // Not liveStreak(h) > 0 — a habit with an existing streak still reads
+    // as > 0 on a day it hasn't been checked in yet (a missed check-in
+    // only zeroes the streak the *next* time it's recomputed, not
+    // instantly), so that contradicted _TodayFocusSliver's progress ring
+    // a few sections down, which correctly reads today's actual check-in.
+    final todayStr = todayLocalDateString();
+    final doneToday = habits
+        .where(
+          (h) =>
+              ref
+                  .watch(checkInProvider(CheckInQuery(h.id, todayStr)))
+                  .valueOrNull
+                  ?.completed ??
+              false,
+        )
+        .length;
     final total = habits.length;
     final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;

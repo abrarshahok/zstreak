@@ -1,11 +1,10 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../habits/data/local/app_database.dart';
+import '../habits/domain/habit_repository.dart';
 
 /// One export mechanism serves two spec asks: the guest safety net
 /// (Section 3a, "Export my data" before the 24-hour window closes data
@@ -13,22 +12,31 @@ import '../habits/data/local/app_database.dart';
 /// CSV was chosen over JSON since Section 6 names CSV explicitly for the
 /// general case, and Section 3a accepts either.
 class DataExporter {
-  DataExporter(this._db);
+  DataExporter(this._repo);
 
-  final AppDatabase _db;
+  // Not AppDatabase (Drift) directly — that's only ever correct for
+  // guests. A signed-in user's real habits live in Firestore
+  // (habitRepositoryProvider routes on auth state, same as every other
+  // screen), so reading Drift straight for them silently produced an
+  // empty/stale export that still looked successful.
+  final HabitRepository _repo;
 
   Future<String> buildCsv() async {
-    final habits = await _db.select(_db.habits).get();
+    final active = await _repo.watchActiveHabits().first;
+    final archived = await _repo.watchArchivedHabits().first;
+    final habits = [...active, ...archived];
     final habitNames = {for (final h in habits) h.id: h.name};
-    final checkIns = await (_db.select(
-      _db.checkIns,
-    )..orderBy([(c) => OrderingTerm.asc(c.date)])).get();
 
     final buffer = StringBuffer('habit_name,date,completed,note\n');
-    for (final c in checkIns) {
-      final name = _escapeCsv(habitNames[c.habitId] ?? 'unknown');
-      final note = _escapeCsv(c.note ?? '');
-      buffer.writeln('$name,${c.date},${c.completed},$note');
+    for (final habit in habits) {
+      final checkIns = await _repo.watchHabitCheckIns(habit.id).first;
+      final sorted = checkIns.toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      for (final c in sorted) {
+        final name = _escapeCsv(habitNames[c.habitId] ?? 'unknown');
+        final note = _escapeCsv(c.note ?? '');
+        buffer.writeln('$name,${c.date},${c.completed},$note');
+      }
     }
     return buffer.toString();
   }

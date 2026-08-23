@@ -45,6 +45,18 @@ class Habit {
 
   bool get isArchived => archivedAt != null;
 
+  /// Whether this habit is scheduled on the given ISO weekday (1=Mon..7=Sun).
+  /// `daily` habits are scheduled every day, and `xPerWeek` habits have no
+  /// per-day restriction (any day can count toward the weekly target) — only
+  /// `weekdays` habits restrict check-ins to a specific set of days.
+  bool isScheduledOnWeekday(int weekday) {
+    return switch (frequencyType) {
+      FrequencyType.daily || FrequencyType.xPerWeek => true,
+      FrequencyType.weekdays =>
+        (frequencyConfig as WeekdaysConfig).weekdays.contains(weekday),
+    };
+  }
+
   Habit copyWith({
     String? name,
     String? emoji,

@@ -85,7 +85,20 @@ _WeekStats _computeWeekStats(
   Map<String, List<dynamic>> daysByHabit,
 ) {
   final now = DateTime.now();
-  final weekStart = now.subtract(Duration(days: now.weekday - 1)); // Monday
+  // _shouldShowWeeklyReview shows this on Sunday evening (recapping the
+  // week ending *today*) or on Monday (recapping the week that just
+  // *ended*, i.e. last week) — but weekday-1 alone always lands on the
+  // Monday of the CURRENT week. On Sunday that's correct (today's week);
+  // on Monday it's wrong (today, not last week), which is why the card
+  // used to say "no check-ins recorded this week yet" every Monday. Step
+  // the reference date back 7 days first so Monday's math lands on last
+  // week's Monday instead.
+  final referenceDate = now.weekday == DateTime.monday
+      ? now.subtract(const Duration(days: 7))
+      : now;
+  final weekStart = referenceDate.subtract(
+    Duration(days: referenceDate.weekday - 1),
+  ); // Monday
   final weekDates = List.generate(7, (i) {
     final d = weekStart.add(Duration(days: i));
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

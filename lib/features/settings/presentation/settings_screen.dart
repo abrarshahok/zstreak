@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:home_widget/home_widget.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,6 +26,7 @@ import '../../habits/application/habit_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
+import '../../widgets/data/widget_pin_channel.dart';
 
 /// Settings screen — Gen-Z redesign with GenZBackground, glassmorphic
 /// section cards, and theme-aware colors.
@@ -59,6 +59,7 @@ class SettingsScreen extends ConsumerWidget {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -79,7 +80,12 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          48 + MediaQuery.of(context).padding.bottom,
+        ),
         children:
             [
                   // ── Profile ───────────────────────────────────────────────────
@@ -200,7 +206,8 @@ class SettingsScreen extends ConsumerWidget {
                         _SettingsTile(
                           icon: Icons.pause_circle_outline,
                           label: 'Deactivate account',
-                          subtitle: 'Data is kept, not deleted — reactivate anytime',
+                          subtitle:
+                              'Data is kept, not deleted — reactivate anytime',
                           accent: AppColors.danger,
                           textPrimary: AppColors.danger,
                           textMuted: textMuted,
@@ -367,13 +374,28 @@ class SettingsScreen extends ConsumerWidget {
     final deletionService = ref.read(accountDeletionServiceProvider);
     final guestRepo = ref.read(guestMetaRepositoryProvider);
 
-    // ── Step 1: wipe all local Drift data (habits, check-ins, guest_meta) ───
-    // Uses wipeAllLocalData() — full delete with no re-insert, since the
-    // anonymous session is being destroyed and we don't need a fresh row.
-    await guestRepo.wipeAllLocalData();
+    try {
+      // ── Step 1: wipe all local Drift data (habits, check-ins, guest_meta) ─
+      // Uses wipeAllLocalData() — full delete with no re-insert, since the
+      // anonymous session is being destroyed and we don't need a fresh row.
+      await guestRepo.wipeAllLocalData();
 
-    // ── Step 2: clear profile data from SharedPreferences ────────────────────
-    await ref.read(userProfileProvider.notifier).reset();
+      // ── Step 2: clear profile data from SharedPreferences ────────────────
+      await ref.read(userProfileProvider.notifier).reset();
+    } catch (e) {
+      // Without this, either step throwing left the user staring at
+      // Settings with no indication anything went wrong — possibly
+      // believing their data was wiped/they were logged out when neither
+      // happened, unlike _confirmDeactivateAccount's identical shape a
+      // few lines below, which already handles this.
+      if (!context.mounted) return;
+      AppSnackBar.show(
+        context,
+        'Could not log out: $e',
+        type: SnackBarType.error,
+      );
+      return;
+    }
 
     // ── Step 3: navigate to AuthGate — tears down all Firestore listeners ────
     // Guest (anonymous) users are blocked from Firestore by security rules
@@ -465,14 +487,34 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _restorePurchases(BuildContext context, WidgetRef ref) async {
-    await ref.read(revenueCatServiceProvider).restorePurchases();
-    final isPremium = await ref.read(hasActiveEntitlementProvider.future);
-    if (!context.mounted) return;
-    AppSnackBar.show(
-      context,
-      isPremium ? 'Restored.' : 'No previous purchase found.',
-      type: isPremium ? SnackBarType.success : SnackBarType.warning,
-    );
+    // No loading state on this tile (unlike _SaveButton elsewhere in this
+    // file) and no error handling at all — a slow or failed platform
+    // call used to look identical to "nothing happened". This gives
+    // in-flight feedback without needing to thread a busy flag through
+    // this ConsumerWidget, and now actually reports failure distinctly
+    // from "no purchase found".
+    AppSnackBar.show(context, 'Restoring purchases…', type: SnackBarType.info);
+    try {
+      await ref.read(revenueCatServiceProvider).restorePurchases();
+      // Missing here previously (present in the paywall's own _restore) —
+      // without it, the entitlement check below could read back the
+      // FutureProvider's cached pre-restore value instead of a fresh one.
+      ref.invalidate(hasActiveEntitlementProvider);
+      final isPremium = await ref.read(hasActiveEntitlementProvider.future);
+      if (!context.mounted) return;
+      AppSnackBar.show(
+        context,
+        isPremium ? 'Restored.' : 'No previous purchase found.',
+        type: isPremium ? SnackBarType.success : SnackBarType.warning,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      AppSnackBar.show(
+        context,
+        'Could not restore purchases: $e',
+        type: SnackBarType.error,
+      );
+    }
   }
 
   Future<void> _addWidget(BuildContext context, WidgetRef ref) async {
@@ -482,9 +524,7 @@ class SettingsScreen extends ConsumerWidget {
       await navigateToPaywall(context, ref);
       return;
     }
-    await HomeWidget.requestPinWidget(
-      qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider',
-    );
+    await requestPinHabitWidget();
   }
 }
 

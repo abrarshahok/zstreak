@@ -15,6 +15,15 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://zstreak.web.app" />
+    <meta
+      property="og:image"
+      content="https://zstreak.web.app/assets/screenshots/feature_graphic.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:image"
+      content="https://zstreak.web.app/assets/screenshots/feature_graphic.png"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -652,9 +661,12 @@
       }
       .pricing-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 16px;
         margin-top: 56px;
+        max-width: 720px;
+        margin-left: auto;
+        margin-right: auto;
       }
       .plan-card {
         background: var(--surface);
@@ -1155,19 +1167,19 @@
         <div class="section-label">⚡ Pricing</div>
         <h2 class="section-title">Simple, honest pricing.</h2>
         <p class="section-sub">
-          Start free. Upgrade when you're ready to go all in.
+          Start free. Exact pricing (monthly or lifetime, in your currency)
+          is shown in the app — Play Store handles that part, not us.
         </p>
         <div class="pricing-grid">
           <div class="plan-card">
             <div class="plan-name">Free</div>
-            <div class="plan-price">$0</div>
-            <div class="plan-period">forever</div>
+            <div class="plan-price">Free</div>
+            <div class="plan-period">forever · no credit card</div>
             <ul class="plan-features">
               <li><span class="check">✓</span> Up to 3 habits</li>
-              <li><span class="check">✓</span> Streak tracking</li>
               <li><span class="check">✓</span> Daily reminders</li>
+              <li><span class="check">✓</span> Backfill history — last 7 days</li>
               <li><span class="cross">–</span> Home screen widget</li>
-              <li><span class="cross">–</span> Cloud sync across devices</li>
               <li><span class="cross">–</span> Analytics & insights</li>
             </ul>
             <a
@@ -1178,42 +1190,22 @@
             >
           </div>
           <div class="plan-card featured">
-            <div class="plan-badge">MOST POPULAR</div>
-            <div class="plan-name">Pro Monthly</div>
-            <div class="plan-price">$9.99</div>
-            <div class="plan-period">per month · cancel anytime</div>
+            <div class="plan-badge">UNLOCK EVERYTHING</div>
+            <div class="plan-name">Pro</div>
+            <div class="plan-price">Pro</div>
+            <div class="plan-period">monthly or lifetime — pick in the app</div>
             <ul class="plan-features">
               <li><span class="check">✓</span> Unlimited habits</li>
-              <li><span class="check">✓</span> Streak tracking</li>
-              <li><span class="check">✓</span> Smart reminders</li>
+              <li><span class="check">✓</span> Smart streak-at-risk alerts</li>
+              <li><span class="check">✓</span> Unlimited backfill history</li>
               <li><span class="check">✓</span> Home screen widget</li>
-              <li><span class="check">✓</span> Cloud sync across devices</li>
               <li><span class="check">✓</span> Analytics & insights</li>
             </ul>
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
               class="btn-primary"
               style="display: block; text-align: center"
-              >Go Pro ⚡</a
-            >
-          </div>
-          <div class="plan-card">
-            <div class="plan-name">Pro Lifetime</div>
-            <div class="plan-price">$99.99</div>
-            <div class="plan-period">one-time · pay once, own forever</div>
-            <ul class="plan-features">
-              <li><span class="check">✓</span> Unlimited habits</li>
-              <li><span class="check">✓</span> Streak tracking</li>
-              <li><span class="check">✓</span> Smart reminders</li>
-              <li><span class="check">✓</span> Home screen widget</li>
-              <li><span class="check">✓</span> Cloud sync across devices</li>
-              <li><span class="check">✓</span> Analytics & insights</li>
-            </ul>
-            <a
-              href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-              class="btn-secondary"
-              style="display: block; text-align: center"
-              >Get Lifetime ⚡</a
+              >Unlock Pro in the app ⚡</a
             >
           </div>
         </div>

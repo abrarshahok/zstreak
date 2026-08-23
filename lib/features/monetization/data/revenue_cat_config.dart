@@ -6,7 +6,7 @@
 /// 2. Copy the **Public SDK key** (starts with "goog_…").
 /// 3. Replace the [androidApiKey] value below with that key.
 ///
-/// 4. In the RevenueCat dashboard create an **Entitlement** named "premium"
+/// 4. In the RevenueCat dashboard create an **Entitlement** named "pro"
 ///    (must match [premiumEntitlementId] exactly).
 ///
 /// 5. Create at least one **Product** in Google Play Console, then attach it
@@ -31,9 +31,10 @@ class RevenueCatConfig {
   /// that manual step happening before every release.
   static const String androidApiKey = String.fromEnvironment(
     'REVENUECAT_ANDROID_API_KEY',
-    defaultValue: 'goog_RUwHehSsFrCVtXKxPdSeIpoLSAT', // test key — dev default only
+    defaultValue:
+        'goog_RUwHehSsFrCVtXKxPdSeIpoLSAT', // test key — dev default only
   );
 
   /// Must match the Entitlement identifier in your RevenueCat dashboard.
-  static const String premiumEntitlementId = 'premium';
+  static const String premiumEntitlementId = 'pro';
 }

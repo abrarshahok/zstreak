@@ -23,7 +23,9 @@ class _SignedInHomeGateState extends ConsumerState<SignedInHomeGate> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _resumeMigrationIfNeeded());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _resumeMigrationIfNeeded(),
+    );
   }
 
   Future<void> _resumeMigrationIfNeeded() async {

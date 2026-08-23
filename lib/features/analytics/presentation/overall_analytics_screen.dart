@@ -79,6 +79,7 @@ class OverallAnalyticsScreen extends ConsumerWidget {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -287,9 +288,20 @@ class _AnalyticsSkeleton extends StatelessWidget {
       isDark: isDark,
       builder: (context, colors) {
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            48 + MediaQuery.of(context).padding.bottom,
+          ),
           children: [
-            ShimmerCard(colors: colors, height: 36, radius: 10, padding: EdgeInsets.zero, child: const SizedBox()),
+            ShimmerCard(
+              colors: colors,
+              height: 36,
+              radius: 10,
+              padding: EdgeInsets.zero,
+              child: const SizedBox(),
+            ),
             const SizedBox(height: 16),
             ShimmerCard(
               colors: colors,
@@ -303,11 +315,24 @@ class _AnalyticsSkeleton extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ShimmerBlock(height: 14, width: 100, color: colors.border),
+                        ShimmerBlock(
+                          height: 14,
+                          width: 100,
+                          color: colors.border,
+                        ),
                         const SizedBox(height: 10),
-                        ShimmerBlock(height: 11, width: double.infinity, color: colors.border),
+                        ShimmerBlock(
+                          height: 11,
+                          width: double.infinity,
+                          color: colors.border,
+                        ),
                         const SizedBox(height: 10),
-                        ShimmerBlock(height: 5, width: double.infinity, radius: 4, color: colors.border),
+                        ShimmerBlock(
+                          height: 5,
+                          width: double.infinity,
+                          radius: 4,
+                          color: colors.border,
+                        ),
                       ],
                     ),
                   ),
@@ -325,7 +350,10 @@ class _AnalyticsSkeleton extends StatelessWidget {
               children: List.generate(4, (i) {
                 return ShimmerCard(
                   colors: colors,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
                       ShimmerCircle(size: 22, color: colors.border),
@@ -335,9 +363,17 @@ class _AnalyticsSkeleton extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ShimmerBlock(height: 9, width: 50, color: colors.border),
+                            ShimmerBlock(
+                              height: 9,
+                              width: 50,
+                              color: colors.border,
+                            ),
                             const SizedBox(height: 6),
-                            ShimmerBlock(height: 16, width: 36, color: colors.border),
+                            ShimmerBlock(
+                              height: 16,
+                              width: 36,
+                              color: colors.border,
+                            ),
                           ],
                         ),
                       ),
@@ -363,14 +399,24 @@ class _AnalyticsSkeleton extends StatelessWidget {
               child: Column(
                 children: List.generate(3, (i) {
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     child: Row(
                       children: [
                         ShimmerCircle(size: 8, color: colors.border),
                         const SizedBox(width: 10),
-                        Expanded(child: ShimmerBlock(height: 13, color: colors.border)),
+                        Expanded(
+                          child: ShimmerBlock(height: 13, color: colors.border),
+                        ),
                         const SizedBox(width: 10),
-                        ShimmerBlock(height: 20, width: 40, radius: 6, color: colors.border),
+                        ShimmerBlock(
+                          height: 20,
+                          width: 40,
+                          radius: 6,
+                          color: colors.border,
+                        ),
                       ],
                     ),
                   );
@@ -498,7 +544,8 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
     // populate, instead of hand-rolling a parallel fetch of the same
     // Firestore/Drift query outside Riverpod's cache.
     final asyncResults = {
-      for (final habit in widget.habits) habit.id: ref.watch(streakDetailProvider(habit)),
+      for (final habit in widget.habits)
+        habit.id: ref.watch(streakDetailProvider(habit)),
     };
 
     if (asyncResults.values.any((a) => a.isLoading && !a.hasValue)) {
@@ -523,12 +570,16 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
         : results.values.fold<double>(0, (s, r) => s + _windowRate(r)) /
               results.length;
 
-    final prevAvgRate = results.isEmpty
-        ? 0.0
+    // Null on "All" — there's no previous window to compare against, so
+    // _prevWindowRate returned a stub 0 that made `avgRate - 0` display
+    // as a fake "trending up" badge equal to the rate itself, on every
+    // All-time view regardless of whether anything actually changed.
+    final prevAvgRate = (results.isEmpty || _filter.days == null)
+        ? null
         : results.values.fold<double>(0, (s, r) => s + _prevWindowRate(r)) /
               results.length;
 
-    final rateTrend = avgRate - prevAvgRate;
+    final rateTrend = prevAvgRate == null ? null : avgRate - prevAvgRate;
 
     final longestEver = results.values.fold<int>(
       0,
@@ -740,7 +791,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
 
   String _buildInsight({
     required int consistencyScore,
-    required double rateTrend,
+    required double? rateTrend,
     required int longestEver,
     required int totalCheckIns,
   }) {
@@ -748,12 +799,12 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
       return '🔥 You\'re on fire! Near-perfect consistency.';
     }
     if (consistencyScore >= 75) {
-      return rateTrend > 0.05
+      return rateTrend != null && rateTrend > 0.05
           ? '📈 Great momentum — you\'re improving!'
           : '💪 Strong consistency. Keep it up!';
     }
     if (consistencyScore >= 50) {
-      return rateTrend > 0
+      return rateTrend != null && rateTrend > 0
           ? '↗️ Trending up — you\'re building the habit!'
           : '🎯 Halfway there. Small steps every day.';
     }
@@ -843,7 +894,10 @@ class _ConsistencyCard extends StatelessWidget {
   });
 
   final int score;
-  final double trend;
+  // Null on the "All" time filter — there's no well-defined previous
+  // window to compare against, so there's nothing to trend against
+  // either (see _prevWindowRate's doc comment).
+  final double? trend;
   final String insight;
   final Color accent;
   final Color textPrimary;
@@ -861,8 +915,8 @@ class _ConsistencyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scoreColor = _scoreColor;
-    final trendUp = trend > 0.02;
-    final trendDown = trend < -0.02;
+    final trendUp = trend != null && trend! > 0.02;
+    final trendDown = trend != null && trend! < -0.02;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -959,7 +1013,7 @@ class _ConsistencyCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              '${(trend.abs() * 100).round()}%',
+                              '${(trend!.abs() * 100).round()}%',
                               style: TextStyle(
                                 color: trendUp
                                     ? const Color(0xFF4CAF50)
@@ -1071,7 +1125,8 @@ class _StatGrid extends StatelessWidget {
   final int totalCheckIns;
   final int longestEver;
   final double avgRate;
-  final double rateTrend;
+  // Null on the "All" time filter — see _prevWindowRate's doc comment.
+  final double? rateTrend;
   final Color accent;
   final Color textPrimary;
   final Color textMuted;
@@ -1081,10 +1136,11 @@ class _StatGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = isDark ? AppColors.border : AppColors.borderLight;
-    final trendColor = rateTrend >= 0
+    final trend = rateTrend;
+    final trendColor = (trend != null && trend >= 0)
         ? const Color(0xFF4CAF50)
         : AppColors.danger;
-    final trendIcon = rateTrend >= 0
+    final trendIcon = (trend != null && trend >= 0)
         ? Icons.arrow_upward_rounded
         : Icons.arrow_downward_rounded;
 
@@ -1105,11 +1161,11 @@ class _StatGrid extends StatelessWidget {
         icon: '⚡',
         label: 'Avg Rate',
         value: '${(avgRate * 100).round()}%',
-        sub: rateTrend.abs() > 0.01
+        sub: (trend != null && trend.abs() > 0.01)
             ? _TrendSub(
                 icon: trendIcon,
                 color: trendColor,
-                label: '${(rateTrend.abs() * 100).round()}%',
+                label: '${(trend.abs() * 100).round()}%',
               )
             : null,
       ),
@@ -1337,8 +1393,14 @@ class _BarChart extends StatelessWidget {
       );
     }
 
-    // Show at most 30 bars to avoid crowding
-    final display = data.length > 30 ? data.sublist(data.length - 30) : data;
+    // Used to cap this at the most recent 30 bars "to avoid crowding",
+    // but the section header above always says "Last N days" for
+    // whatever the selected filter is (up to 90) — silently showing only
+    // the last 30 of those regardless made the label a lie on the 90D
+    // filter. _BarChartPainter divides available width by data.length,
+    // so it scales to any bar count on its own; the practical max here
+    // is 90 (the widest filter), which stays legible.
+    final display = data;
     final peak = display.fold<int>(0, (m, d) => math.max(m, d.count));
     final effectiveMax = math.max(peak.toDouble(), maxValue);
 

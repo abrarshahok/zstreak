@@ -44,6 +44,45 @@ service cloud.firestore {
             || request.time < doc.reactivationDeadline);
     }
 
+    // Bounds on individual habit doc fields — a signed-in account is free
+    // to create (one tap, no payment) and the app's own `.limit(50)`
+    // habit-list query and 60/200-char name/description text fields are
+    // UI-only conveniences with no server-side backing on their own, so
+    // anyone with valid (even brand-new, free) auth could otherwise write
+    // arbitrarily large field values straight through the Firestore API,
+    // bypassing the app UI entirely. Limits here are generous relative to
+    // the client's own caps (60/200 chars) specifically so no legitimate
+    // write is ever rejected.
+    //
+    // This does NOT cap the *number* of habit/check-in documents a user
+    // can create — Firestore security rules have no way to count sibling
+    // documents in a collection without a separately maintained counter
+    // field, kept in sync by a Cloud Function trigger (the `functions/`
+    // project has `deleteAccount` today, but no such counter/trigger yet)
+    // — a real follow-up if per-user document-count limits are wanted,
+    // not something addable in rules alone. Field-size caps at least
+    // bound the cost of any *single* write.
+    function isValidHabitWrite(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.emoji is string && data.emoji.size() <= 32
+        && data.colorHex is string && data.colorHex.size() <= 16
+        && data.frequencyType is string && data.frequencyType.size() <= 32
+        && data.frequencyConfig is map && data.frequencyConfig.size() <= 20
+        && (data.get('reminderTime', null) == null
+            || (data.reminderTime is string && data.reminderTime.size() <= 16))
+        && (data.get('description', null) == null
+            || (data.description is string && data.description.size() <= 1000))
+        && data.currentStreak is int && data.currentStreak >= 0 && data.currentStreak <= 100000
+        && data.longestStreak is int && data.longestStreak >= 0 && data.longestStreak <= 100000
+        && data.sortOrder is int;
+    }
+
+    function isValidCheckInWrite(data) {
+      return data.completed is bool
+        && (data.get('note', null) == null
+            || (data.note is string && data.note.size() <= 1000));
+    }
+
     match /users/{uid} {
       // Deliberately not gated by isActive() — the account doc is where
       // status itself lives, and the owner must always be able to read
@@ -65,10 +104,14 @@ service cloud.firestore {
       }
 
       match /habits/{habitId} {
-        allow read, write: if isOwner(uid) && isActive(uid);
+        allow read, delete: if isOwner(uid) && isActive(uid);
+        allow create, update: if isOwner(uid) && isActive(uid)
+          && isValidHabitWrite(request.resource.data);
 
         match /check_ins/{date} {
-          allow read, write: if isOwner(uid) && isActive(uid);
+          allow read, delete: if isOwner(uid) && isActive(uid);
+          allow create, update: if isOwner(uid) && isActive(uid)
+            && isValidCheckInWrite(request.resource.data);
         }
       }
     }

@@ -3,13 +3,16 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
+import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../application/habit_providers.dart';
+import '../domain/frequency.dart';
 import '../domain/habit.dart';
 
 /// Archived habits screen — flat design, theme-aware.
@@ -40,6 +43,7 @@ class ArchivedHabitsScreen extends ConsumerWidget {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -69,7 +73,12 @@ class ArchivedHabitsScreen extends ConsumerWidget {
             return _EmptyState(textMuted: textMuted, accent: accent);
           }
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              48 + MediaQuery.of(context).padding.bottom,
+            ),
             itemCount: habits.length,
             itemBuilder: (context, index) =>
                 _ArchivedHabitTile(
@@ -116,20 +125,38 @@ class _ArchivedListSkeleton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  ShimmerBlock(width: 48, height: 48, radius: 14, color: colors.border),
+                  ShimmerBlock(
+                    width: 48,
+                    height: 48,
+                    radius: 14,
+                    color: colors.border,
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ShimmerBlock(height: 14, width: 120, color: colors.border),
+                        ShimmerBlock(
+                          height: 14,
+                          width: 120,
+                          color: colors.border,
+                        ),
                         const SizedBox(height: 8),
-                        ShimmerBlock(height: 11, width: 90, color: colors.border),
+                        ShimmerBlock(
+                          height: 11,
+                          width: 90,
+                          color: colors.border,
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ShimmerBlock(height: 30, width: 70, radius: 10, color: colors.border),
+                  ShimmerBlock(
+                    height: 30,
+                    width: 70,
+                    radius: 10,
+                    color: colors.border,
+                  ),
                 ],
               ),
             ),
@@ -249,7 +276,30 @@ class _ArchivedHabitTileState extends ConsumerState<_ArchivedHabitTile> {
             hour: int.parse(parts[0]),
             minute: int.parse(parts[1]),
           ),
+          scheduledWeekdays: habit.frequencyType == FrequencyType.weekdays
+              ? (habit.frequencyConfig as WeekdaysConfig).weekdays
+              : null,
         );
+  }
+
+  // Previously the only way to permanently delete an archived habit was
+  // to restore it first (burning a free-tier slot in the process) and
+  // then delete it from Habit Detail or Edit — an unnecessary detour for
+  // something people reasonably expect to do straight from this list.
+  Future<void> _deletePermanently() async {
+    final confirmed = await showFlatConfirmDialog(
+      context: context,
+      title: AppCopy.deleteHabitConfirmTitle,
+      body: AppCopy.deleteHabitConfirmBody,
+      confirmLabel: 'Delete',
+      isDanger: true,
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    final habit = widget.habit;
+    await ref.read(habitRepositoryProvider).deleteHabit(habit.id);
+    await ref.read(notificationServiceProvider).cancelAllForHabit(habit.id);
   }
 
   @override
@@ -352,6 +402,18 @@ class _ArchivedHabitTileState extends ConsumerState<_ArchivedHabitTile> {
                   ),
                 ),
               ),
+            ),
+
+            // ── Delete permanently ────────────────────────────────────────
+            const SizedBox(width: 6),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: AppColors.danger,
+              ),
+              tooltip: 'Delete permanently',
+              onPressed: _deletePermanently,
             ),
           ],
         ),

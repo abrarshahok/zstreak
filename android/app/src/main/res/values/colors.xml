@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget color tokens — mirrors lib/core/theme/app_theme.dart's AppColors
+     (light theme values here; see values-night/colors.xml for dark). Kept
+     as named resources, not hardcoded hex in each drawable/layout, so the
+     widget's look stays in one place instead of scattered across files. -->
+<resources>
+    <color name="widget_surface">#FFFFFF</color>
+    <color name="widget_border">#E5E5E5</color>
+    <color name="widget_emoji_bg">#F0F0F0</color>
+    <color name="widget_text_primary">#111111</color>
+    <color name="widget_text_muted">#888888</color>
+    <color name="widget_accent">#7C3AED</color>
+    <color name="widget_accent_on">#FFFFFF</color>
+    <color name="widget_fire">#FF6B00</color>
+    <!-- Flat approximations of the in-app mini grid's semi-transparent
+         black-on-white overlays (_TileMiniGridPainter's emptyColor/
+         missedColor), precomputed against this theme's widget_surface
+         since the grid is drawn as an opaque bitmap, not a real overlay. -->
+    <color name="widget_grid_empty">#EDEDED</color>
+    <color name="widget_grid_missed">#E0E0E0</color>
+</resources>

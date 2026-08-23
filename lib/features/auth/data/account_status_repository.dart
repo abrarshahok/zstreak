@@ -28,11 +28,14 @@ class AccountStatusRepository {
 
   AccountStatusRecord _toRecord(DocumentSnapshot<Map<String, dynamic>> snap) {
     final data = snap.data();
-    if (data == null) return const AccountStatusRecord(status: AccountStatus.active);
+    if (data == null) {
+      return const AccountStatusRecord(status: AccountStatus.active);
+    }
     return AccountStatusRecord(
       status: AccountStatus.fromDbValue(data['status'] as String?),
       deactivatedAt: (data['deactivatedAt'] as Timestamp?)?.toDate(),
-      reactivationDeadline: (data['reactivationDeadline'] as Timestamp?)?.toDate(),
+      reactivationDeadline: (data['reactivationDeadline'] as Timestamp?)
+          ?.toDate(),
     );
   }
 

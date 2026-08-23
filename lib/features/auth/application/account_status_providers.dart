@@ -14,7 +14,9 @@ final accountStatusRepositoryProvider = Provider<AccountStatusRepository>(
 final accountStatusProvider = StreamProvider<AccountStatusRecord>((ref) {
   final user = ref.watch(authStateProvider).valueOrNull;
   if (user == null || user.isAnonymous) {
-    return Stream.value(const AccountStatusRecord(status: AccountStatus.active));
+    return Stream.value(
+      const AccountStatusRecord(status: AccountStatus.active),
+    );
   }
   return ref.watch(accountStatusRepositoryProvider).watchStatus(user.uid);
 });

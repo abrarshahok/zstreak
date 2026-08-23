@@ -66,16 +66,18 @@ class FirestoreHabitRepository implements HabitRepository {
     final id = _uuid.v4();
     final now = DateTime.now();
     final doc = _habits.doc(id);
-    await doc.set(HabitFirestoreCodec.forCreate(
-      name: name,
-      emoji: emoji,
-      colorHex: colorHex,
-      frequencyType: frequencyType,
-      frequencyConfig: frequencyConfig,
-      reminderTime: reminderTime,
-      description: description,
-      createdAt: now,
-    ));
+    await doc.set(
+      HabitFirestoreCodec.forCreate(
+        name: name,
+        emoji: emoji,
+        colorHex: colorHex,
+        frequencyType: frequencyType,
+        frequencyConfig: frequencyConfig,
+        reminderTime: reminderTime,
+        description: description,
+        createdAt: now,
+      ),
+    );
     return _toDomain(await doc.get());
   }
 
@@ -150,10 +152,32 @@ class FirestoreHabitRepository implements HabitRepository {
     await _recalculateStreak(habitId);
   }
 
-  Future<void> _recalculateStreak(String habitId) async {
-    final habitDoc = await _habits.doc(habitId).get();
-    final habit = _toDomain(habitDoc);
+  @override
+  Future<bool> toggleCheckIn({
+    required String habitId,
+    required String date,
+  }) async {
+    final doc = _habits.doc(habitId).collection('check_ins').doc(date);
+    final newCompleted = await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(doc);
+      final wasCompleted =
+          existing.exists && (existing.data()?['completed'] as bool? ?? false);
+      final newCompleted = !wasCompleted;
+      if (!newCompleted) {
+        transaction.delete(doc);
+      } else {
+        transaction.set(doc, {
+          'completed': true,
+          'loggedAt': Timestamp.now(),
+        }, SetOptions(merge: true));
+      }
+      return newCompleted;
+    });
+    await _recalculateStreak(habitId);
+    return newCompleted;
+  }
 
+  Future<void> _recalculateStreak(String habitId) async {
     // No limit here on purpose: StreakCalculator recomputes from the full
     // completed-check-in history, so truncating this query (a previous
     // `.limit(400)` here) silently fed it an arbitrary subset once a habit
@@ -167,19 +191,32 @@ class FirestoreHabitRepository implements HabitRepository {
         .get();
     final completedDates = checkInsSnap.docs.map((d) => d.id).toSet();
 
-    final result = StreakCalculator.compute(
-      frequencyType: habit.frequencyType,
-      frequencyConfig: habit.frequencyConfig,
-      createdAtLocal: habit.createdAt,
-      completedDates: completedDates,
-      today: DateTime.now(),
-    );
+    // The habit-doc read+write below runs in its own transaction — not
+    // wrapped around the query above, since Firestore transactions can
+    // only `.get()` individual documents, not run queries — so two
+    // concurrent setCheckIn calls for the same habit (a rapid double-tap,
+    // or several days toggled back-to-back in the calendar grid) can't
+    // read the same stale longestStreak and overwrite each other's
+    // update: the transaction retries automatically if the habit doc
+    // changes between its read and commit.
+    await _firestore.runTransaction((transaction) async {
+      final habitDoc = await transaction.get(_habits.doc(habitId));
+      final habit = _toDomain(habitDoc);
 
-    await _habits.doc(habitId).update({
-      'currentStreak': result.currentStreak,
-      'longestStreak': result.longestStreak > habit.longestStreak
-          ? result.longestStreak
-          : habit.longestStreak,
+      final result = StreakCalculator.compute(
+        frequencyType: habit.frequencyType,
+        frequencyConfig: habit.frequencyConfig,
+        createdAtLocal: habit.createdAt,
+        completedDates: completedDates,
+        today: DateTime.now(),
+      );
+
+      transaction.update(_habits.doc(habitId), {
+        'currentStreak': result.currentStreak,
+        'longestStreak': result.longestStreak > habit.longestStreak
+            ? result.longestStreak
+            : habit.longestStreak,
+      });
     });
   }
 

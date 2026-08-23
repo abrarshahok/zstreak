@@ -9,7 +9,11 @@ import '../theme/app_theme.dart';
 /// base/highlight/border color trio for the current theme, so every
 /// skeleton across the app pulses in sync using identical tokens.
 class ShimmerLoading extends StatefulWidget {
-  const ShimmerLoading({super.key, required this.isDark, required this.builder});
+  const ShimmerLoading({
+    super.key,
+    required this.isDark,
+    required this.builder,
+  });
 
   final bool isDark;
   final Widget Function(BuildContext context, ShimmerColors colors) builder;

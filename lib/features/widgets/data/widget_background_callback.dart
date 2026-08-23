@@ -9,6 +9,19 @@ import '../../habits/data/local/app_database.dart';
 import '../../habits/data/local/drift_habit_repository.dart';
 import '../../habits/data/remote/firestore_habit_repository.dart';
 import '../../habits/domain/habit_repository.dart';
+import 'widget_sync_service.dart';
+
+/// `home_widget`'s background broadcast receiver (see AndroidManifest.xml)
+/// is `exported="true"` with no permission of its own — any other app
+/// installed on the same device can send this same broadcast with an
+/// arbitrary `habitId`, not just the real widget UI. Every genuine habit
+/// id is a uuid v4 ([DriftHabitRepository.createHabit],
+/// [MigrationService]), so this shape check costs nothing for a real tap
+/// (no DB round-trip) while rejecting an obviously-forged/garbage id
+/// before it ever reaches the database.
+final _uuidV4Pattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);
 
 /// Runs in a headless background isolate when the widget's check-in
 /// button is tapped (spec Section 2, "tappable to mark complete without
@@ -19,28 +32,49 @@ import '../../habits/domain/habit_repository.dart';
 Future<void> widgetInteractivityCallback(Uri? uri) async {
   if (uri == null || uri.host != 'checkin') return;
   final habitId = uri.queryParameters['habitId'];
-  if (habitId == null) return;
+  if (habitId == null || !_uuidV4Pattern.hasMatch(habitId)) return;
 
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  // This isolate has no crash-reporting hook and no user-visible surface
+  // to show an error on — a malformed/forged broadcast that still passes
+  // the shape check above, or a transient Firestore/DB error, should
+  // silently no-op this one tap rather than crash the isolate outright.
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    await Firebase.initializeApp();
 
-  final user = FirebaseAuth.instance.currentUser;
-  final HabitRepository repo = (user != null && !user.isAnonymous)
-      ? FirestoreHabitRepository(FirebaseFirestore.instance, user.uid)
-      : DriftHabitRepository(AppDatabase());
+    final user = FirebaseAuth.instance.currentUser;
+    final HabitRepository repo = (user != null && !user.isAnonymous)
+        ? FirestoreHabitRepository(FirebaseFirestore.instance, user.uid)
+        : DriftHabitRepository(AppDatabase());
 
-  final today = todayLocalDateString();
-  final existing = await repo.watchCheckIn(habitId: habitId, date: today).first;
-  await repo.setCheckIn(habitId: habitId, date: today, completed: !(existing?.completed ?? false));
+    final today = todayLocalDateString();
+    // toggleCheckIn (not a read-then-negate-then-setCheckIn here) reads
+    // and flips the completed value inside a single database transaction.
+    // Each tap on the widget's button runs this callback in its own
+    // headless isolate with no shared in-memory state, so a plain
+    // read-then-write here would let two fast taps both read the same
+    // pre-toggle value and collide on the same result — a tap that should
+    // have cancelled a previous one instead silently gets lost.
+    final completedToday = await repo.toggleCheckIn(habitId: habitId, date: today);
 
-  final habit = await repo.getHabitById(habitId);
-  if (habit == null) return;
-  final checkIn = await repo.watchCheckIn(habitId: habitId, date: today).first;
+    final habit = await repo.getHabitById(habitId);
+    if (habit == null) return;
+    final checkIns = await repo.watchHabitCheckIns(habitId).first;
 
-  await HomeWidget.saveWidgetData<String>('habit_${habit.id}_streak', habit.currentStreak.toString());
-  await HomeWidget.saveWidgetData<String>(
-    'habit_${habit.id}_completed_today',
-    (checkIn?.completed ?? false).toString(),
-  );
-  await HomeWidget.updateWidget(qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider');
+    // Writes name/emoji/color/streak/completedToday/grid in one shared
+    // place (writeHabitData) instead of re-deriving a partial subset here
+    // — a previous hand-rolled version only wrote streak + completedToday,
+    // which is why the check icon updated on a widget tap but the
+    // contribution grid kept showing stale data.
+    await WidgetSyncService().writeHabitData(
+      habit,
+      completedToday: completedToday,
+      checkIns: checkIns,
+    );
+    await HomeWidget.updateWidget(
+      qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider',
+    );
+  } catch (_) {
+    // Swallowed — see comment above.
+  }
 }

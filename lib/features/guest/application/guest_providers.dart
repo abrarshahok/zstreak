@@ -29,7 +29,8 @@ final guestTimeRemainingProvider = Provider<Duration>((ref) {
   ref.watch(_guestClockTickProvider);
   final meta = ref.watch(guestMetaProvider).valueOrNull;
   if (meta == null) return guestWindowDuration;
-  final remaining = guestWindowDuration - DateTime.now().difference(meta.guestStartedAt);
+  final remaining =
+      guestWindowDuration - DateTime.now().difference(meta.guestStartedAt);
   return remaining.isNegative ? Duration.zero : remaining;
 });
 

@@ -34,7 +34,7 @@ final habitRepositoryProvider = Provider<HabitRepository>((ref) {
   return WidgetSyncingHabitRepository(
     backend,
     ref.watch(widgetSyncServiceProvider),
-    ref.watch(entitlementRepositoryProvider),
+    () => ref.read(hasActiveEntitlementProvider.future),
   );
 });
 

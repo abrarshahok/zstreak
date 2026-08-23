@@ -84,8 +84,9 @@ class NotificationOrchestrator {
         continue;
       }
 
-      final checkedInToday = (checkInsByHabit[habit.id] ?? const [])
-          .any((c) => c.date == todayStr && c.completed);
+      final checkedInToday = (checkInsByHabit[habit.id] ?? const []).any(
+        (c) => c.date == todayStr && c.completed,
+      );
 
       if (checkedInToday) {
         // Already done — cancel any pending risk alert.

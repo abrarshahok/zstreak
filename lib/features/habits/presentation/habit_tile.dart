@@ -59,6 +59,7 @@ class HabitTile extends ConsumerWidget {
     final currentStreak =
         streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
     final isOnFire = currentStreak >= 7;
+    final isScheduledToday = habit.isScheduledOnWeekday(DateTime.now().weekday);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -183,16 +184,22 @@ class HabitTile extends ConsumerWidget {
 
                     const SizedBox(width: 10),
 
-                    // Check-in toggle
+                    // Check-in toggle — disabled on days this habit isn't
+                    // scheduled for (e.g. a Sunday for a Mon/Wed/Fri habit).
                     Semantics(
-                      label: isDone
+                      label: !isScheduledToday
+                          ? '${habit.name}, not scheduled today'
+                          : isDone
                           ? '${habit.name}, done today, tap to undo'
                           : '${habit.name}, mark done today',
                       button: true,
                       child: _CheckInToggle(
                         isDone: isDone,
                         color: accentColor,
-                        onTap: () => _toggle(context, ref, today, isDone),
+                        enabled: isScheduledToday,
+                        onTap: isScheduledToday
+                            ? () => _toggle(context, ref, today, isDone)
+                            : null,
                       ),
                     ),
 
@@ -375,11 +382,13 @@ class _CheckInToggle extends StatefulWidget {
     required this.isDone,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   final bool isDone;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   @override
   State<_CheckInToggle> createState() => _CheckInToggleState();
@@ -433,37 +442,40 @@ class _CheckInToggleState extends State<_CheckInToggle>
         : Colors.black.withValues(alpha: 0.15);
     final checkIconColor = contrastForeground(widget.color);
 
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: widget.isDone ? _scale.value : 1.0,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.isDone ? widget.color : Colors.transparent,
-                border: Border.all(
-                  color: widget.isDone ? widget.color : borderColor,
-                  width: 1.5,
+    return Opacity(
+      opacity: widget.enabled ? 1.0 : 0.35,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: widget.isDone ? _scale.value : 1.0,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isDone ? widget.color : Colors.transparent,
+                  border: Border.all(
+                    color: widget.isDone ? widget.color : borderColor,
+                    width: 1.5,
+                  ),
                 ),
+                child: widget.isDone
+                    ? Icon(Icons.check_rounded, color: checkIconColor, size: 20)
+                    : Icon(
+                        Icons.add_rounded,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.3)
+                            : Colors.black.withValues(alpha: 0.25),
+                        size: 18,
+                      ),
               ),
-              child: widget.isDone
-                  ? Icon(Icons.check_rounded, color: checkIconColor, size: 20)
-                  : Icon(
-                      Icons.add_rounded,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.3)
-                          : Colors.black.withValues(alpha: 0.25),
-                      size: 18,
-                    ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

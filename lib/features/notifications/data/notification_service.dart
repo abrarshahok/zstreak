@@ -6,9 +6,15 @@ import 'package:timezone/timezone.dart' as tz;
 
 /// Notification channel IDs — each maps to a distinct Android channel so
 /// users can silence individual categories without losing all notifications.
+///
+/// habitReminders/streakAlerts carry a `_v2` suffix: a channel's sound is
+/// locked in the moment Android first creates it, so switching these two
+/// to the alarm-stream sound below needed a fresh channel id — reusing the
+/// old one would've silently kept the old default notification sound for
+/// anyone who'd already received a notification through it.
 class NotificationChannels {
-  static const habitReminders = 'habit_reminders';
-  static const streakAlerts = 'streak_alerts';
+  static const habitReminders = 'habit_reminders_v2';
+  static const streakAlerts = 'streak_alerts_v2';
   static const milestones = 'milestones';
   static const weeklySummary = 'weekly_summary';
   static const proUpsell = 'pro_upsell';
@@ -60,8 +66,12 @@ class NotificationService {
     final timezoneInfo = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
 
+    // Not @mipmap/ic_launcher — Android forces every notification/status-
+    // bar icon to solid white, discarding all color, so the app's actual
+    // full-color icon rendered as a shapeless blob there. This is a
+    // dedicated white-silhouette asset (see its own doc comment).
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@drawable/ic_stat_notify',
     );
     await _plugin.initialize(
       settings: const InitializationSettings(android: androidSettings),
@@ -113,13 +123,95 @@ class NotificationService {
 
   // ─── 1. Daily habit reminder ───────────────────────────────────────────────
 
+  /// [scheduledWeekdays] restricts delivery to those ISO weekdays (1=Mon..
+  /// 7=Sun) — pass null/empty for a habit with no such restriction (daily,
+  /// or xPerWeek where any day counts). Without this, a Mon/Wed/Fri habit
+  /// used to get nagged every single day regardless of its own schedule.
   Future<void> scheduleDailyReminder({
     required String habitId,
     required String habitName,
     required String habitEmoji,
     required int currentStreak,
     required TimeOfDay time,
+    List<int>? scheduledWeekdays,
   }) async {
+    // Clear whatever was scheduled before (either style) so switching a
+    // habit between "every day" and "specific days" — or editing which
+    // days — never leaves a stale schedule from the old configuration.
+    await cancelReminder(habitId);
+
+    // Smart habit-specific body: streak-aware message.
+    final body = currentStreak > 0
+        ? '$habitEmoji $habitName — ${currentStreak}d streak on the line!'
+        : '$habitEmoji $habitName — Start your streak today!';
+
+    NotificationDetails details() => NotificationDetails(
+      android: AndroidNotificationDetails(
+        NotificationChannels.habitReminders,
+        'Habit reminders',
+        channelDescription: 'Daily reminders for your habits',
+        importance: Importance.high,
+        priority: Priority.high,
+        enableVibration: true,
+        // The default notification blip is too easy to miss — this
+        // plays the device's actual alarm sound through the alarm
+        // audio stream instead, which is louder and more likely to
+        // cut through silent/Do Not Disturb.
+        playSound: true,
+        sound: const UriAndroidNotificationSound(
+          'content://settings/system/alarm_alert',
+        ),
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+      ),
+    );
+
+    final exact = await _exactAvailable;
+
+    if (scheduledWeekdays == null || scheduledWeekdays.isEmpty) {
+      final now = tz.TZDateTime.now(tz.local);
+      var scheduled = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        time.hour,
+        time.minute,
+      );
+      if (scheduled.isBefore(now)) {
+        scheduled = scheduled.add(const Duration(days: 1));
+      }
+      await _plugin.zonedSchedule(
+        id: _notificationIdFor(habitId),
+        title: 'Time to lock in 🔒',
+        body: body,
+        scheduledDate: scheduled,
+        notificationDetails: details(),
+        payload: habitId,
+        matchDateTimeComponents: DateTimeComponents.time,
+        androidScheduleMode: _scheduleMode(exact),
+      );
+      return;
+    }
+
+    // One repeating notification per scheduled weekday — there's no
+    // single DateTimeComponents value for "a specific subset of
+    // weekdays", so each day gets its own id and its own weekly repeat
+    // (same dayOfWeekAndTime pattern the weekly summary already uses).
+    for (final weekday in scheduledWeekdays) {
+      await _plugin.zonedSchedule(
+        id: _weekdayReminderId(habitId, weekday),
+        title: 'Time to lock in 🔒',
+        body: body,
+        scheduledDate: _nextInstanceOfWeekdayTime(weekday, time),
+        notificationDetails: details(),
+        payload: habitId,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        androidScheduleMode: _scheduleMode(exact),
+      );
+    }
+  }
+
+  tz.TZDateTime _nextInstanceOfWeekdayTime(int isoWeekday, TimeOfDay time) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
       tz.local,
@@ -129,36 +221,14 @@ class NotificationService {
       time.hour,
       time.minute,
     );
-    if (scheduled.isBefore(now)) {
+    while (scheduled.weekday != isoWeekday || scheduled.isBefore(now)) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
-
-    // Smart habit-specific body: streak-aware message.
-    final body = currentStreak > 0
-        ? '$habitEmoji $habitName — ${currentStreak}d streak on the line!'
-        : '$habitEmoji $habitName — Start your streak today!';
-
-    final exact = await _exactAvailable;
-    await _plugin.zonedSchedule(
-      id: _notificationIdFor(habitId),
-      title: 'Time to lock in 🔒',
-      body: body,
-      scheduledDate: scheduled,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          NotificationChannels.habitReminders,
-          'Habit reminders',
-          channelDescription: 'Daily reminders for your habits',
-          importance: Importance.high,
-          priority: Priority.high,
-          enableVibration: true,
-        ),
-      ),
-      payload: habitId,
-      matchDateTimeComponents: DateTimeComponents.time,
-      androidScheduleMode: _scheduleMode(exact),
-    );
+    return scheduled;
   }
+
+  int _weekdayReminderId(String habitId, int weekday) =>
+      Object.hash(habitId, weekday) & 0x7FFFFFFF;
 
   // ─── 2. Streak-at-risk alert ───────────────────────────────────────────────
 
@@ -194,6 +264,14 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           enableVibration: true,
+          // Same alarm-stream sound as the daily reminder — this is the
+          // "you're about to lose your streak" moment, so it should be
+          // the least missable notification in the app.
+          playSound: true,
+          sound: const UriAndroidNotificationSound(
+            'content://settings/system/alarm_alert',
+          ),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
         ),
       ),
       payload: habitId,
@@ -370,8 +448,16 @@ class NotificationService {
 
   /// Cancels the daily reminder tied to a habit — call on archive, delete,
   /// and whenever a reminder is cleared in Edit Habit.
-  Future<void> cancelReminder(String habitId) =>
-      _plugin.cancel(id: _notificationIdFor(habitId));
+  /// Cancels both scheduling styles regardless of which one is currently
+  /// active for this habit — cheap (cancelling an id nothing was ever
+  /// scheduled under is a no-op) and avoids ever needing to know which
+  /// style was last used to schedule.
+  Future<void> cancelReminder(String habitId) async {
+    await _plugin.cancel(id: _notificationIdFor(habitId));
+    for (var weekday = DateTime.monday; weekday <= DateTime.sunday; weekday++) {
+      await _plugin.cancel(id: _weekdayReminderId(habitId, weekday));
+    }
+  }
 
   /// Cancel all notifications for a habit (reminder + streak-at-risk).
   Future<void> cancelAllForHabit(String habitId) async {

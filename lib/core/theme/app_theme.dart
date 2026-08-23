@@ -22,6 +22,11 @@ class AppColors {
   static const Color textMuted = Color(0xFF888888);
   static const Color danger = Color(0xFFFF4D4D);
 
+  /// Same role as [danger] but for a positive status (free-trial badges,
+  /// "trending up") — used in both themes like danger is, not split into
+  /// light/dark variants.
+  static const Color success = Color(0xFF22C55E);
+
   /// Reserved for Premium/Pro-only UI — reads as a notch more special
   /// than the standard violet accent, in both themes.
   static const Color premiumGold = Color(0xFFFFB300);

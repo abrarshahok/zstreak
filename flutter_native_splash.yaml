@@ -1,0 +1,16 @@
+flutter_native_splash:
+  # Matches the pre-existing launch_background.xml (plain white) so
+  # generating this config doesn't visually change the very first frame —
+  # it only lets main.dart hold this same screen a bit longer, through
+  # auth-resolve and profile-hydration, instead of handing off early to a
+  # separate Flutter-rendered loading screen.
+  color: "#FFFFFF"
+  color_dark: "#0E0E0E"
+
+  android_12:
+    color: "#FFFFFF"
+    color_dark: "#0E0E0E"
+
+  android: true
+  ios: false
+  web: false

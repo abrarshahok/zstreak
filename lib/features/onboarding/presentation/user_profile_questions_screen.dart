@@ -75,7 +75,9 @@ class _UserProfileQuestionsScreenState
     final googleName = widget.alreadySignedIn
         ? ref.read(authRepositoryProvider).currentUser?.displayName
         : null;
-    _nameCtrl.text = profile.name.isNotEmpty ? profile.name : (googleName ?? '');
+    _nameCtrl.text = profile.name.isNotEmpty
+        ? profile.name
+        : (googleName ?? '');
     if (profile.age.isNotEmpty) {
       final parsed = int.tryParse(profile.age);
       if (parsed != null && parsed >= _minAge && parsed <= _maxAge) {
@@ -267,6 +269,7 @@ class _UserProfileQuestionsScreenState
                 children: [
                   IconButton(
                     onPressed: _back,
+                    tooltip: 'Back',
                     icon: Icon(
                       Icons.arrow_back_ios_new_rounded,
                       size: 18,

@@ -46,6 +46,10 @@ class RecordingHabitRepository implements HabitRepository {
   Future<Habit?> getHabitById(String id) async => _habitAfterCheckIn;
 
   @override
+  Future<bool> toggleCheckIn({required String habitId, required String date}) =>
+      throw UnimplementedError();
+
+  @override
   Stream<List<Habit>> watchActiveHabits() => throw UnimplementedError();
   @override
   Stream<List<Habit>> watchArchivedHabits() => throw UnimplementedError();

@@ -169,10 +169,13 @@ class GuestBanner extends ConsumerWidget {
                               true,
                       child: Padding(
                         padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.close_rounded,
-                          color: mutedColor,
-                          size: 16,
+                        child: Tooltip(
+                          message: 'Dismiss',
+                          child: Icon(
+                            Icons.close_rounded,
+                            color: mutedColor,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ),

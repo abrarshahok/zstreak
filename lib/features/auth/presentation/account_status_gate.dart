@@ -46,11 +46,38 @@ class AccountStatusGate extends ConsumerWidget {
     }
   }
 
-  Future<void> _signOut(WidgetRef ref) => ref.read(authRepositoryProvider).signOut();
+  Future<void> _signOut(WidgetRef ref) =>
+      ref.read(authRepositoryProvider).signOut();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final record = ref.watch(accountStatusProvider).valueOrNull ??
+    final statusAsync = ref.watch(accountStatusProvider);
+
+    // Defaulting valueOrNull to "active" while this is still loading —
+    // e.g. accountStatusProvider re-subscribing fresh after the app was
+    // killed and reopened — briefly let SignedInHomeGate mount and try
+    // habit reads Firestore's rules would deny for a genuinely
+    // deactivated/restricted account, exactly the race this gate's own
+    // doc comment says it exists to prevent. Same fix shape as
+    // profileHydratingProvider elsewhere in the auth flow: hold here
+    // until the real status is known instead of assuming the safe case.
+    if (statusAsync.isLoading && !statusAsync.hasValue) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return Scaffold(
+        backgroundColor: isDark
+            ? AppColors.background
+            : AppColors.backgroundLight,
+        body: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: isDark ? AppColors.accent : AppColors.accentTextOnLight,
+          ),
+        ),
+      );
+    }
+
+    final record =
+        statusAsync.valueOrNull ??
         const AccountStatusRecord(status: AccountStatus.active);
 
     if (record.status == AccountStatus.active) return child;
@@ -61,7 +88,8 @@ class AccountStatusGate extends ConsumerWidget {
     // same "contact support" screen — Firestore's own security rules
     // reject a client's attempt to write status back to 'active' in
     // either case, so there's no working "Reactivate" button to offer.
-    if (record.status == AccountStatus.restrict || record.isPastReactivationWindow) {
+    if (record.status == AccountStatus.restrict ||
+        record.isPastReactivationWindow) {
       final isExpiredWindow = record.status == AccountStatus.inactive;
       return _AccountLockedScreen(
         icon: '🔒',
@@ -114,7 +142,9 @@ class _AccountLockedScreen extends StatelessWidget {
     final bg = isDark ? AppColors.background : AppColors.backgroundLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
-    final textPrimary = isDark ? AppColors.textPrimary : AppColors.textPrimaryLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
     final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
     final buttonFg = isDark ? Colors.black : Colors.white;
@@ -136,7 +166,9 @@ class _AccountLockedScreen extends StatelessWidget {
                     color: surface,
                     border: Border.all(color: border, width: 1),
                   ),
-                  child: Center(child: Text(icon, style: const TextStyle(fontSize: 39))),
+                  child: Center(
+                    child: Text(icon, style: const TextStyle(fontSize: 39)),
+                  ),
                 ),
                 const SizedBox(height: 28),
                 Text(
@@ -168,7 +200,10 @@ class _AccountLockedScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: Text(primaryLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(
+                      primaryLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),

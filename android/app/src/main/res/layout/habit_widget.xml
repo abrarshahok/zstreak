@@ -1,56 +1,180 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors HabitTile's layout (lib/features/habits/presentation/
+     habit_tile.dart): emoji in a circular badge, name + accent-dot streak
+     row, and a check-in toggle that's a filled accent circle when done or
+     an outlined circle with a faint "+" when not — same shapes and same
+     color tokens (see values/colors.xml), not the generic checkbox/cyan
+     look this used to have. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background">
 
-    <!-- Populated with the mapped habit's data (spec Section 2/12). -->
+    <!-- widget_content's grid now grows only up to 9 rows (see
+         HabitWidgetProvider's MAX_ROWS), not indefinitely, so on a
+         widget cell taller than that content needs, something has to
+         take the leftover space. FrameLayout's own android:layout_gravity
+         centering on widget_content didn't visibly take effect on-device,
+         so this uses the more bulletproof real-widget trick instead: two
+         equal-weight spacers around the unweighted content in a vertical
+         LinearLayout, which forces true centering through weight
+         distribution rather than gravity — leftover space splits evenly
+         above and below the content instead of collecting in one spot.
+         This wrapper always exists; only widget_content itself toggles
+         gone/visible. -->
     <LinearLayout
-        android:id="@+id/widget_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="16dp"
-        android:visibility="gone">
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/widget_emoji"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="28sp" />
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/widget_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
 
-            <TextView
-                android:id="@+id/widget_name"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="#F5F5F7"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+        <!-- Header row: emoji, name + streak, check-in toggle. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-            <TextView
-                android:id="@+id/widget_streak"
-                android:layout_width="wrap_content"
+            <!-- Emoji badge — a circle, not bare text, with an optional "on
+                 fire" flame overlay matching HabitTile's top-right badge.
+                 44dp to match HabitTile's own emoji badge size exactly. -->
+            <FrameLayout
+                android:layout_width="44dp"
+                android:layout_height="44dp">
+
+                <TextView
+                    android:id="@+id/widget_emoji"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/widget_emoji_circle"
+                    android:gravity="center"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/widget_fire_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="-4dp"
+                    android:layout_marginEnd="-4dp"
+                    android:text="🔥"
+                    android:textSize="10sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:textColor="#8A8A96"
-                android:textSize="12sp" />
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Not a plain <View> — RemoteViews only inflates a
+                         fixed whitelist of view classes (no bare View), so
+                         that silently failed the whole widget's inflation
+                         ("Problem loading widget"). ImageView is on the
+                         whitelist and android:src renders the same dot. -->
+                    <ImageView
+                        android:layout_width="6dp"
+                        android:layout_height="6dp"
+                        android:src="@drawable/widget_streak_dot" />
+
+                    <TextView
+                        android:id="@+id/widget_streak"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:textColor="@color/widget_text_muted"
+                        android:textSize="11sp" />
+
+                    <!-- >=7 day streak badge, matching HabitTile's "ON FIRE"
+                         label next to the streak dot/count. -->
+                    <TextView
+                        android:id="@+id/widget_on_fire"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:letterSpacing="0.05"
+                        android:text="ON FIRE"
+                        android:textColor="@color/widget_fire"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Rendered as a single bitmap in HabitWidgetProvider.kt
+                 (renderCheckInBitmap) instead of a static background +
+                 src drawable pair — a habit's accent color is only known
+                 at render time, so matching HabitTile's filled-accent-
+                 circle-when-done look needs to be drawn per habit, not
+                 baked into a fixed-color XML shape. 40dp to match
+                 HabitTile's own toggle size exactly. -->
+            <ImageButton
+                android:id="@+id/widget_checkin_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Mark today complete"
+                android:scaleType="fitCenter" />
         </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/widget_checkin_button"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/widget_checkin_circle"
-            android:contentDescription="Mark today complete"
-            android:src="@android:drawable/checkbox_off_background" />
+        <!-- Mini contribution grid — rendered as a single bitmap in
+             HabitWidgetProvider.kt (RemoteViews can't do custom Canvas
+             drawing the way the in-app version's CustomPaint does), same
+             completed/missed/not-applicable language as HabitTile's grid.
+             wrap_content + fitCenter (not match_parent/weight=1 + fitXY)
+             — the bitmap is already drawn at its exact real pixel size
+             (fixed 8dp cells, up to 9 rows, column count chosen to fit),
+             so sizing the view to anything bigger than that just centers
+             it inside a larger box, padding blank space above/below it;
+             sizing the view to the bitmap itself removes that gap and
+             stretching it to fill would turn square cells into distorted
+             pills. Any further leftover height is handled by the spacer
+             pair around widget_content above, not here. -->
+        <ImageView
+            android:id="@+id/widget_grid"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:scaleType="fitCenter" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
     </LinearLayout>
 
     <!-- Zero-habit empty state (spec Section 2's widget config note). -->
@@ -61,7 +185,7 @@
         android:gravity="center"
         android:padding="16dp"
         android:text="No habit selected — tap to add one"
-        android:textColor="#8A8A96"
+        android:textColor="@color/widget_text_muted"
         android:textSize="13sp"
         android:visibility="gone" />
 
@@ -73,7 +197,7 @@
         android:gravity="center"
         android:padding="16dp"
         android:text="Subscription expired — tap to renew"
-        android:textColor="#8A8A96"
+        android:textColor="@color/widget_text_muted"
         android:textSize="13sp"
         android:visibility="gone" />
 

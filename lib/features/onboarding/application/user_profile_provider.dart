@@ -245,6 +245,21 @@ final userProfileProvider = NotifierProvider<UserProfileNotifier, UserProfile>(
   UserProfileNotifier.new,
 );
 
+/// True while a just-completed sign-in's Firestore profile hydration is
+/// still in flight. [userProfileProvider]'s initial state is seeded
+/// purely from SharedPreferences (empty on a new device/fresh install/
+/// after sign-out), and the actual Firestore fetch — the only way an
+/// existing account's real name reaches this device — runs
+/// asynchronously from app.dart's auth listener, unawaited by anything
+/// that gates navigation. Without this flag, AuthGate evaluates
+/// profileCompleteProvider against that still-empty local seed and
+/// routes an existing user through the name-entry screen for the couple
+/// of seconds it takes the Firestore read to land, before flipping to
+/// Home once it resolves. Defaults to false (non-blocking) — it's only
+/// ever set true for the specific window between detecting a
+/// non-anonymous sign-in and that sync attempt finishing.
+final profileHydratingProvider = StateProvider<bool>((ref) => false);
+
 // ─── unawaited helper ─────────────────────────────────────────────────────────
 
 void unawaited(Future<void> future) {

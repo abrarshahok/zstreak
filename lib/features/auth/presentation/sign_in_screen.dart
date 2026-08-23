@@ -118,6 +118,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   size: 18,
                   color: textPrimary,
                 ),
+                tooltip: 'Back',
                 onPressed: () => Navigator.of(context).pop(),
               )
             : null,

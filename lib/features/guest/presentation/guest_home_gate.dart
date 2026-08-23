@@ -35,7 +35,8 @@ class _GuestHomeGateState extends ConsumerState<GuestHomeGate> {
   @override
   Widget build(BuildContext context) {
     final stage = ref.watch(guestWindowStageProvider);
-    final isPaying = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
+    final isPaying =
+        ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
     if (stage == GuestWindowStage.expired && !isPaying) {
       return const GuestExpiredInterstitial();

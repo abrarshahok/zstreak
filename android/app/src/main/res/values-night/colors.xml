@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark-theme counterpart to values/colors.xml — mirrors AppColors' dark
+     tokens. widget_accent_on is black here (not white) because #B57BFF is
+     light enough that AppColors.contrastForeground() picks black text/
+     icons on top of it — same rule the in-app habit tile uses. -->
+<resources>
+    <color name="widget_surface">#1A1A1A</color>
+    <color name="widget_border">#2A2A2A</color>
+    <color name="widget_emoji_bg">#242424</color>
+    <color name="widget_text_primary">#F2F2F2</color>
+    <color name="widget_text_muted">#888888</color>
+    <color name="widget_accent">#B57BFF</color>
+    <color name="widget_accent_on">#000000</color>
+    <color name="widget_fire">#FF6B00</color>
+    <color name="widget_grid_empty">#2C2C2C</color>
+    <color name="widget_grid_missed">#3A3A3A</color>
+</resources>

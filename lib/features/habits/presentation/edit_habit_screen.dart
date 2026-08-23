@@ -287,6 +287,19 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
       return;
     }
     setState(() => _nameError = null);
+    // A weekdays habit with zero days selected would be permanently
+    // uncheckable — Habit.isScheduledOnWeekday returns false for every
+    // day when WeekdaysConfig.weekdays is empty, and every check-in
+    // surface (Home tile/grid, Habit Detail, the monthly grid) gates on
+    // exactly that.
+    if (_frequencyType == FrequencyType.weekdays && _weekdays.isEmpty) {
+      AppSnackBar.show(
+        context,
+        'Pick at least one day',
+        type: SnackBarType.error,
+      );
+      return;
+    }
     if (widget.existing == null) {
       final activeCount =
           (await ref.read(habitRepositoryProvider).watchActiveHabits().first)
@@ -353,6 +366,9 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         habitEmoji: _emoji,
         currentStreak: latestHabit?.currentStreak ?? 0,
         time: _reminderTime!,
+        scheduledWeekdays: _frequencyType == FrequencyType.weekdays
+            ? _weekdays.toList()
+            : null,
       );
     }
     if (!mounted) return;
@@ -459,6 +475,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
             size: 18,
             color: textPrimary,
           ),
+          tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -518,7 +535,12 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          120 + MediaQuery.of(context).padding.bottom,
+        ),
         children: [
           // Name
           Column(
@@ -809,6 +831,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                 if (_reminderTime != null)
                   IconButton(
                     icon: Icon(Icons.close_rounded, color: textMuted, size: 18),
+                    tooltip: 'Clear reminder',
                     onPressed: () => setState(() => _reminderTime = null),
                   ),
                 TextButton(
