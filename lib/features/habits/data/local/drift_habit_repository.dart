@@ -6,8 +6,10 @@ import 'package:uuid/uuid.dart';
 // ignore_for_file: avoid_dynamic_calls
 
 import '../../domain/check_in.dart';
+import '../../domain/check_in_status.dart';
 import '../../domain/frequency.dart';
 import '../../domain/habit.dart';
+import '../../domain/habit_category.dart';
 import '../../domain/habit_repository.dart';
 import '../../domain/streak_calculator.dart';
 import 'app_database.dart';
@@ -56,6 +58,10 @@ class DriftHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) async {
     final now = DateTime.now();
     final row = HabitsCompanion.insert(
@@ -69,6 +75,10 @@ class DriftHabitRepository implements HabitRepository {
       description: Value(description),
       createdAt: now,
       updatedAt: now,
+      categoryId: Value(categoryId),
+      targetCount: Value(targetCount),
+      targetUnit: Value(targetUnit),
+      isQuitHabit: Value(isQuitHabit),
     );
     await _db.into(_db.habits).insert(row);
     return _toDomain(
@@ -87,14 +97,7 @@ class DriftHabitRepository implements HabitRepository {
       ..where((c) => c.habitId.equals(habitId) & c.date.equals(date));
     return query.watchSingleOrNull().map((row) {
       if (row == null) return null;
-      return CheckIn(
-        id: row.id,
-        habitId: row.habitId,
-        date: row.date,
-        completed: row.completed,
-        note: row.note,
-        loggedAt: row.loggedAt,
-      );
+      return _checkInFromRow(row);
     });
   }
 
@@ -103,27 +106,27 @@ class DriftHabitRepository implements HabitRepository {
     final query = _db.select(_db.checkIns)
       ..where((c) => c.habitId.equals(habitId));
     return query.watch().map(
-      (rows) => rows
-          .map(
-            (row) => CheckIn(
-              id: row.id,
-              habitId: row.habitId,
-              date: row.date,
-              completed: row.completed,
-              note: row.note,
-              loggedAt: row.loggedAt,
-            ),
-          )
-          .toList(),
+      (rows) => rows.map(_checkInFromRow).toList(),
     );
   }
+
+  CheckIn _checkInFromRow(CheckInRow row) => CheckIn(
+    id: row.id,
+    habitId: row.habitId,
+    date: row.date,
+    status: CheckInStatus.fromDbValue(row.status),
+    value: row.value,
+    note: row.note,
+    loggedAt: row.loggedAt,
+  );
 
   @override
   Future<void> setCheckIn({
     required String habitId,
     required String date,
-    required bool completed,
+    required CheckInStatus status,
     String? note,
+    int? value,
   }) async {
     // The check-in row write and the streak recompute below both need to
     // see each other's effects atomically — two setCheckIn calls for the
@@ -141,7 +144,7 @@ class DriftHabitRepository implements HabitRepository {
                 ..where((c) => c.habitId.equals(habitId) & c.date.equals(date)))
               .getSingleOrNull();
 
-      if (!completed) {
+      if (status == CheckInStatus.missed && value == null) {
         if (existing != null) {
           await (_db.delete(
             _db.checkIns,
@@ -152,7 +155,9 @@ class DriftHabitRepository implements HabitRepository {
           _db.checkIns,
         )..where((c) => c.id.equals(existing.id))).write(
           CheckInsCompanion(
-            completed: const Value(true),
+            completed: Value(status == CheckInStatus.completed),
+            status: Value(status.toDbValue()),
+            value: Value(value ?? existing.value),
             note: Value(note ?? existing.note),
             loggedAt: Value(DateTime.now()),
           ),
@@ -165,7 +170,9 @@ class DriftHabitRepository implements HabitRepository {
                 id: _uuid.v4(),
                 habitId: habitId,
                 date: date,
-                completed: const Value(true),
+                completed: Value(status == CheckInStatus.completed),
+                status: Value(status.toDbValue()),
+                value: Value(value),
                 note: Value(note),
                 loggedAt: DateTime.now(),
               ),
@@ -200,6 +207,7 @@ class DriftHabitRepository implements HabitRepository {
         )..where((c) => c.id.equals(existing.id))).write(
           CheckInsCompanion(
             completed: const Value(true),
+            status: Value(CheckInStatus.completed.toDbValue()),
             loggedAt: Value(DateTime.now()),
           ),
         );
@@ -212,6 +220,7 @@ class DriftHabitRepository implements HabitRepository {
                 habitId: habitId,
                 date: date,
                 completed: const Value(true),
+                status: Value(CheckInStatus.completed.toDbValue()),
                 loggedAt: DateTime.now(),
               ),
             );
@@ -235,18 +244,19 @@ class DriftHabitRepository implements HabitRepository {
         _db.habits,
       )..where((h) => h.id.equals(habitId))).getSingle(),
     );
-    final completedRows =
-        await (_db.select(_db.checkIns)..where(
-              (c) => c.habitId.equals(habitId) & c.completed.equals(true),
-            ))
-            .get();
-    final completedDates = completedRows.map((r) => r.date).toSet();
+    final rows =
+        await (_db.select(
+          _db.checkIns,
+        )..where((c) => c.habitId.equals(habitId))).get();
+    final statusByDate = {
+      for (final r in rows) r.date: CheckInStatus.fromDbValue(r.status),
+    };
 
     final result = StreakCalculator.compute(
       frequencyType: habit.frequencyType,
       frequencyConfig: habit.frequencyConfig,
       createdAtLocal: habit.createdAt,
-      completedDates: completedDates,
+      statusByDate: statusByDate,
       today: DateTime.now(),
     );
 
@@ -271,6 +281,13 @@ class DriftHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool isQuitHabit = false,
   }) async {
     final existing = await (_db.select(
       _db.habits,
@@ -291,6 +308,16 @@ class DriftHabitRepository implements HabitRepository {
         // the longest-streak record (spec Section 5a).
         currentStreak: frequencyChanged ? const Value(0) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
+        categoryId: clearCategoryId
+            ? const Value(null)
+            : Value(categoryId ?? existing.categoryId),
+        targetCount: clearTargetCount
+            ? const Value(null)
+            : Value(targetCount ?? existing.targetCount),
+        targetUnit: clearTargetUnit
+            ? const Value(null)
+            : Value(targetUnit ?? existing.targetUnit),
+        isQuitHabit: Value(isQuitHabit),
       ),
     );
   }
@@ -339,16 +366,87 @@ class DriftHabitRepository implements HabitRepository {
     required DateTime createdAt,
   }) {
     final checkInQuery = _db.select(_db.checkIns)
-      ..where((c) => c.habitId.equals(habitId) & c.completed.equals(true));
+      ..where((c) => c.habitId.equals(habitId));
 
     return checkInQuery.watch().map((checkInRows) {
       return StreakCalculator.compute(
         frequencyType: frequencyType,
         frequencyConfig: frequencyConfig,
         createdAtLocal: createdAt,
-        completedDates: checkInRows.map((r) => r.date).toSet(),
+        statusByDate: {
+          for (final r in checkInRows) r.date: CheckInStatus.fromDbValue(r.status),
+        },
         today: DateTime.now(),
       );
+    });
+  }
+
+  @override
+  Stream<List<HabitCategory>> watchCategories() {
+    final query = _db.select(_db.categories)
+      ..orderBy([(c) => OrderingTerm.asc(c.sortOrder)]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (r) => HabitCategory(
+              id: r.id,
+              name: r.name,
+              emoji: r.emoji,
+              colorHex: r.colorHex,
+              isCustom: true,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  @override
+  Future<HabitCategory> createCategory({
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) async {
+    final id = _uuid.v4();
+    await _db
+        .into(_db.categories)
+        .insert(
+          CategoriesCompanion.insert(
+            id: id,
+            name: name,
+            emoji: emoji,
+            colorHex: colorHex,
+            createdAt: DateTime.now(),
+          ),
+        );
+    return HabitCategory(
+      id: id,
+      name: name,
+      emoji: emoji,
+      colorHex: colorHex,
+      isCustom: true,
+    );
+  }
+
+  @override
+  Future<void> updateCategory({
+    required String id,
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(
+    CategoriesCompanion(
+      name: Value(name),
+      emoji: Value(emoji),
+      colorHex: Value(colorHex),
+    ),
+  );
+
+  @override
+  Future<void> deleteCategory(String id) async {
+    await _db.transaction(() async {
+      await (_db.update(_db.habits)..where((h) => h.categoryId.equals(id)))
+          .write(const HabitsCompanion(categoryId: Value(null)));
+      await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go();
     });
   }
 
@@ -372,6 +470,10 @@ class DriftHabitRepository implements HabitRepository {
       archivedAt: row.archivedAt,
       updatedAt: row.updatedAt,
       sortOrder: row.sortOrder,
+      categoryId: row.categoryId,
+      targetCount: row.targetCount,
+      targetUnit: row.targetUnit,
+      isQuitHabit: row.isQuitHabit,
     );
   }
 }

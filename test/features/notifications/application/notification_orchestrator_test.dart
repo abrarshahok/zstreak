@@ -4,8 +4,10 @@ import 'package:mocktail/mocktail.dart';
 import 'package:zstreak/core/utils/local_date.dart';
 import 'package:zstreak/features/habits/application/habit_providers.dart';
 import 'package:zstreak/features/habits/domain/check_in.dart';
+import 'package:zstreak/features/habits/domain/check_in_status.dart';
 import 'package:zstreak/features/habits/domain/frequency.dart';
 import 'package:zstreak/features/habits/domain/habit.dart';
+import 'package:zstreak/features/habits/domain/habit_category.dart';
 import 'package:zstreak/features/habits/domain/habit_repository.dart';
 import 'package:zstreak/features/habits/domain/streak_calculator.dart';
 import 'package:zstreak/features/monetization/application/entitlement_providers.dart';
@@ -45,6 +47,10 @@ class FakeHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) => throw UnimplementedError();
   @override
   Stream<CheckIn?> watchCheckIn({required String habitId, required String date}) =>
@@ -53,8 +59,9 @@ class FakeHabitRepository implements HabitRepository {
   Future<void> setCheckIn({
     required String habitId,
     required String date,
-    required bool completed,
+    required CheckInStatus status,
     String? note,
+    int? value,
   }) => throw UnimplementedError();
   @override
   Future<({bool completed, int currentStreak})> toggleCheckIn({
@@ -71,6 +78,13 @@ class FakeHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool isQuitHabit = false,
   }) => throw UnimplementedError();
   @override
   Future<void> archiveHabit(String id) => throw UnimplementedError();
@@ -87,6 +101,23 @@ class FakeHabitRepository implements HabitRepository {
   }) => throw UnimplementedError();
   @override
   Future<void> reorderHabits(List<String> orderedIds) => throw UnimplementedError();
+  @override
+  Stream<List<HabitCategory>> watchCategories() => throw UnimplementedError();
+  @override
+  Future<HabitCategory> createCategory({
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => throw UnimplementedError();
+  @override
+  Future<void> updateCategory({
+    required String id,
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => throw UnimplementedError();
+  @override
+  Future<void> deleteCategory(String id) => throw UnimplementedError();
 }
 
 Habit _habit({
@@ -193,7 +224,7 @@ void main() {
               id: today,
               habitId: 'daily',
               date: today,
-              completed: true,
+              status: CheckInStatus.completed,
               loggedAt: DateTime.now(),
             ),
           ],
@@ -288,7 +319,7 @@ void main() {
             id: 'a-$d',
             habitId: 'a',
             date: localDateString(weekStart.add(Duration(days: d))),
-            completed: true,
+            status: CheckInStatus.completed,
             loggedAt: DateTime.now(),
           ),
       ];

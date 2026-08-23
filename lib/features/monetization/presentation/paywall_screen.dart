@@ -16,6 +16,10 @@ import '../application/entitlement_providers.dart';
 // ─── Offerings provider ───────────────────────────────────────────────────────
 
 final _offeringsProvider = FutureProvider<List<Package>>((ref) async {
+  // RevenueCat can target specific offerings per logged-in customer, so
+  // fetching before Purchases.logIn(uid) has caught up risks showing
+  // whatever offering the *previous* identity would have seen.
+  await ref.watch(revenueCatIdentitySyncProvider.future);
   final offerings = await ref.read(revenueCatServiceProvider).getOfferings();
   // offerings.current is null whenever the RevenueCat dashboard doesn't
   // have an offering explicitly marked "current" — that's a dashboard
@@ -93,6 +97,14 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   Future<void> _purchase(Package package) async {
     setState(() => _isBusy = true);
     try {
+      // Without this, a purchase started right after a sign-in/account
+      // link — before RevenueCat's own Purchases.logIn(uid) call for the
+      // new identity has actually finished — gets attributed to whatever
+      // identity RevenueCat still had loaded at that moment (e.g. the
+      // previous anonymous guest, or no one at all). Money charged,
+      // entitlement granted to the wrong customer — about as broken as a
+      // paywall gets. See revenueCatIdentitySyncProvider's doc comment.
+      await ref.read(revenueCatIdentitySyncProvider.future);
       await ref.read(revenueCatServiceProvider).purchasePackage(package);
       // The purchase itself already succeeded at this point — money
       // charged, entitlement granted by RevenueCat. A failure logging it
@@ -124,6 +136,10 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   Future<void> _restore() async {
     setState(() => _isBusy = true);
     try {
+      // Same reasoning as _purchase above — restoring against a not-yet-
+      // synced identity would look up the wrong customer's purchase
+      // history entirely.
+      await ref.read(revenueCatIdentitySyncProvider.future);
       await ref.read(revenueCatServiceProvider).restorePurchases();
       if (!mounted) return;
       ref.invalidate(hasActiveEntitlementProvider);

@@ -141,16 +141,13 @@ class WidgetSyncService {
   /// bucket mirroring _TileMiniGridPainter's `(runLength / 7).clamp(0.4,
   /// 1.0)` alpha ramp (bucket 1 ≈ 0.4 alpha, bucket 9 = 1.0 alpha).
   String _buildGridString(Habit habit, List<CheckIn> checkIns) {
-    final completedDates = checkIns
-        .where((c) => c.completed)
-        .map((c) => c.date)
-        .toSet();
+    final statusByDate = {for (final c in checkIns) c.date: c.status};
     final today = DateTime.now();
     final result = StreakCalculator.compute(
       frequencyType: habit.frequencyType,
       frequencyConfig: habit.frequencyConfig,
       createdAtLocal: habit.createdAt,
-      completedDates: completedDates,
+      statusByDate: statusByDate,
       today: today,
     );
     final byDate = <String, HabitDayStatus>{
@@ -178,6 +175,7 @@ class WidgetSyncService {
         case DayStatus.missed:
           buffer.write('0');
         case DayStatus.notApplicable:
+        case DayStatus.skipped:
         case DayStatus.future:
           buffer.write('.');
       }

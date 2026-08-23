@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
+import '../domain/streak_calculator.dart';
 
 // ─── ISO week key helper ──────────────────────────────────────────────────────
 
@@ -122,10 +123,8 @@ _WeekStats _computeWeekStats(
           '${day.date.year}-${day.date.month.toString().padLeft(2, '0')}-${day.date.day.toString().padLeft(2, '0')}';
       if (!weekDates.contains(dateStr)) continue;
 
-      // DayStatus.completed = 0, DayStatus.missed = 1 (from streak_calculator)
-      final statusName = day.status.name; // 'completed' | 'missed' | etc.
-      if (statusName == 'completed') completedThisWeek++;
-      if (statusName == 'missed') missedThisWeek++;
+      if (day.status == DayStatus.completed) completedThisWeek++;
+      if (day.status == DayStatus.missed) missedThisWeek++;
     }
 
     totalCheckIns += completedThisWeek;
@@ -192,7 +191,12 @@ class WeeklyReviewCard extends ConsumerWidget {
     final weekLabel = _isoWeekKey(now);
 
     return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          // Same bottom-only-margin rule every card in Home's stack
+          // follows (see _StreakSummaryBar's comment) — was 8 here vs
+          // 12 everywhere else, the exact kind of off-by-a-few-pixels
+          // mismatch that reads as "inconsistent" without being
+          // obviously wrong at a glance.
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
@@ -270,7 +274,7 @@ class WeeklyReviewCard extends ConsumerWidget {
                       if (stats.bestHabit != null) ...[
                         Container(
                           width: 1,
-                          height: 32,
+                          height: 28,
                           color: border,
                           margin: const EdgeInsets.symmetric(horizontal: 14),
                         ),
@@ -284,7 +288,7 @@ class WeeklyReviewCard extends ConsumerWidget {
                       if (stats.mostMissedHabit != null) ...[
                         Container(
                           width: 1,
-                          height: 32,
+                          height: 28,
                           color: border,
                           margin: const EdgeInsets.symmetric(horizontal: 14),
                         ),
@@ -298,22 +302,26 @@ class WeeklyReviewCard extends ConsumerWidget {
                     ],
                   ),
 
-                  // Space is always reserved (only the text toggles) — this
-                  // sits above the habit list in a scroll view, so making
-                  // it appear/disappear based on a check-in count that
-                  // changes on every check-in shifted the whole list the
-                  // instant the week's first check-in landed.
-                  const SizedBox(height: 8),
-                  Text(
-                    stats.totalCheckIns == 0
-                        ? 'No check-ins recorded this week yet.'
-                        : '',
-                    style: TextStyle(
-                      color: textMuted,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
+                  // Rendered only when there's actually a message — an
+                  // always-present Text with an empty string still
+                  // reserves a full line's height, which is exactly what
+                  // read as "empty space below" the stats row on every
+                  // week that actually has check-ins (i.e. almost always).
+                  // The one thing that reservation bought — no layout
+                  // jump if a check-in lands while this exact card is on
+                  // screen — is a genuinely rare moment to trade against
+                  // a gap that's visible on every single normal week.
+                  if (stats.totalCheckIns == 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'No check-ins recorded this week yet.',
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -352,7 +360,7 @@ class _StatChip extends StatelessWidget {
           style: TextStyle(
             color: textPrimary,
             fontWeight: FontWeight.w700,
-            fontSize: 20,
+            fontSize: 16,
           ),
         ),
         Text(label, style: TextStyle(color: textMuted, fontSize: 10)),

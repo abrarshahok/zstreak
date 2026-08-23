@@ -1,9 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zstreak/features/habits/domain/check_in_status.dart';
 import 'package:zstreak/features/habits/domain/frequency.dart';
 import 'package:zstreak/features/habits/domain/streak_calculator.dart';
 
 String _ds(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+Map<String, CheckInStatus> _statusMap(
+  Iterable<String> dates, [
+  CheckInStatus status = CheckInStatus.completed,
+]) => {for (final d in dates) d: status};
 
 void main() {
   group('StreakCalculator — daily', () {
@@ -18,7 +24,7 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -39,7 +45,7 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -61,7 +67,7 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -76,7 +82,11 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: const {'2026-03-03', '2026-03-04', '2026-03-05'},
+        statusByDate: _statusMap(const {
+          '2026-03-03',
+          '2026-03-04',
+          '2026-03-05',
+        }),
         today: today,
       );
 
@@ -96,7 +106,11 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: const {'2026-03-03', '2026-03-04', '2026-03-05'},
+        statusByDate: _statusMap(const {
+          '2026-03-03',
+          '2026-03-04',
+          '2026-03-05',
+        }),
         today: today,
       );
 
@@ -124,7 +138,7 @@ void main() {
         frequencyType: FrequencyType.weekdays,
         frequencyConfig: weekdaysConfig,
         createdAtLocal: mondayA,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -152,7 +166,7 @@ void main() {
         frequencyType: FrequencyType.weekdays,
         frequencyConfig: weekdaysConfig,
         createdAtLocal: mondayA,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -181,7 +195,7 @@ void main() {
         frequencyType: FrequencyType.xPerWeek,
         frequencyConfig: config,
         createdAtLocal: week0Monday,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -206,7 +220,7 @@ void main() {
         frequencyType: FrequencyType.xPerWeek,
         frequencyConfig: config,
         createdAtLocal: week0Monday,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -229,7 +243,7 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: createdAt,
-        completedDates: completed,
+        statusByDate: _statusMap(completed),
         today: today,
       );
 
@@ -242,10 +256,67 @@ void main() {
         frequencyType: FrequencyType.daily,
         frequencyConfig: const DailyConfig(),
         createdAtLocal: today,
-        completedDates: const {},
+        statusByDate: const {},
         today: today,
       );
       expect(result.completionRate, 0);
+    });
+  });
+
+  group('StreakCalculator — skipped days', () {
+    test('a skipped day is streak-neutral, like a non-scheduled day', () {
+      final today = DateTime(2026, 3, 10);
+      final createdAt = DateTime(2026, 3, 1);
+      // Completed 1–4 and 6–10; the 5th was explicitly skipped, not missed.
+      final statusByDate = {
+        for (var d = 1; d <= 10; d++)
+          if (d != 5)
+            '2026-03-${d.toString().padLeft(2, '0')}': CheckInStatus.completed,
+        '2026-03-05': CheckInStatus.skipped,
+      };
+
+      final result = StreakCalculator.compute(
+        frequencyType: FrequencyType.daily,
+        frequencyConfig: const DailyConfig(),
+        createdAtLocal: createdAt,
+        statusByDate: statusByDate,
+        today: today,
+      );
+
+      // The skip must not reset the streak the way a real miss would — it
+      // just doesn't add to it either, so the total is the 9 actually
+      // completed days (1-4, then 6-10), unbroken across the skip.
+      expect(result.currentStreak, 9);
+      expect(result.longestStreak, 9);
+      expect(
+        result.days.firstWhere((d) => d.date == DateTime(2026, 3, 5)).status,
+        DayStatus.skipped,
+      );
+    });
+
+    test('a skipped day is excluded from the completion rate', () {
+      final today = DateTime(2026, 3, 6);
+      final createdAt = DateTime(2026, 3, 1);
+      // 1–4 completed, 5 skipped, 6 (today) is future.
+      final statusByDate = {
+        '2026-03-01': CheckInStatus.completed,
+        '2026-03-02': CheckInStatus.completed,
+        '2026-03-03': CheckInStatus.completed,
+        '2026-03-04': CheckInStatus.completed,
+        '2026-03-05': CheckInStatus.skipped,
+      };
+
+      final result = StreakCalculator.compute(
+        frequencyType: FrequencyType.daily,
+        frequencyConfig: const DailyConfig(),
+        createdAtLocal: createdAt,
+        statusByDate: statusByDate,
+        today: today,
+      );
+
+      // Only the 4 completed days count toward the rate — the skip and the
+      // still-future today are both excluded, not counted as misses.
+      expect(result.completionRate, 1.0);
     });
   });
 }

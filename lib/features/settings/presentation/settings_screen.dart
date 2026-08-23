@@ -561,6 +561,12 @@ class SettingsScreen extends ConsumerWidget {
     // from "no purchase found".
     AppSnackBar.show(context, 'Restoring purchases…', type: SnackBarType.info);
     try {
+      // Waits for RevenueCat's own identity (Purchases.logIn) to have
+      // caught up with the current Firebase uid first — otherwise this
+      // can look up the wrong customer's purchase history entirely if it
+      // runs in the same window as a sign-in/account link. See
+      // revenueCatIdentitySyncProvider's doc comment.
+      await ref.read(revenueCatIdentitySyncProvider.future);
       await ref.read(revenueCatServiceProvider).restorePurchases();
       // Missing here previously (present in the paywall's own _restore) —
       // without it, the entitlement check below could read back the

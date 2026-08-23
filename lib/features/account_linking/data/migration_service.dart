@@ -151,6 +151,10 @@ class MigrationService {
           createdAt: habit.createdAt,
           archivedAt: archivedAt,
           sortOrder: habit.sortOrder,
+          categoryId: habit.categoryId,
+          targetCount: habit.targetCount,
+          targetUnit: habit.targetUnit,
+          isQuitHabit: habit.isQuitHabit,
         ),
       );
       pending++;
@@ -162,6 +166,8 @@ class MigrationService {
       for (final checkIn in checkIns) {
         batch.set(habitDoc.collection('check_ins').doc(checkIn.date), {
           'completed': checkIn.completed,
+          'status': checkIn.status,
+          'value': checkIn.value,
           'note': checkIn.note,
           'loggedAt': Timestamp.fromDate(checkIn.loggedAt),
         });

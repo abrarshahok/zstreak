@@ -17,7 +17,6 @@ import '../../notifications/application/notification_providers.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
-import '../domain/habit_template.dart';
 import 'edit_habit_widgets.dart';
 
 const List<String> _emojiChoices = [
@@ -47,38 +46,66 @@ const List<String> _emojiChoices = [
   '⭐', '🔥', '⚡', '🏆', '🎖️', '🚀', '💎', '🌈',
 ];
 
+// 26 colors, swept around the hue wheel red → orange → yellow → green →
+// teal → cyan → blue → indigo → violet → purple → magenta → pink → back
+// toward red — so the picker row reads as one deliberate spectrum rather
+// than a random grab bag. No whites, greys, or near-blacks: every entry
+// is fully saturated so it stays legible as a habit accent on both light
+// and dark surfaces.
 const List<Color> _presetColors = [
+  Color(0xFFFF4D4D), // red
+  Color(0xFFE63950), // crimson
+  Color(0xFFFF6B5B), // coral
+  Color(0xFFFF6B00), // orange
+  Color(0xFFFF9F1C), // tangerine
+  Color(0xFFFFB800), // amber
+  Color(0xFFFFC24D), // marigold
+  Color(0xFFFFD700), // gold
+  Color(0xFFC6FF00), // lime
+  Color(0xFF7ED321), // grass
+  Color(0xFF00C853), // green
+  Color(0xFF00FF94), // mint
+  Color(0xFF00BFA5), // teal
+  Color(0xFF40E0D0), // turquoise
+  Color(0xFF00C2FF), // cyan
+  Color(0xFF38BDF8), // sky
+  Color(0xFF4D9FFF), // blue
+  Color(0xFF2962FF), // indigo blue
+  Color(0xFF6366F1), // indigo
+  Color(0xFF7C3AED), // deep violet
   Color(0xFFB57BFF), // violet — matches app accent
-  Color(0xFF00F0FF),
-  Color(0xFFC6FF00),
-  Color(0xFFFF00E5),
-  Color(0xFFFFB800),
-  Color(0xFFFF4D4D),
-  Color(0xFFF5F5F7),
-  Color(0xFF00FF94),
-  Color(0xFFFF6B00),
-  Color(0xFF4DFFB4),
-  Color(0xFFFF4DA6),
-  Color(0xFF4D9FFF),
-  Color(0xFFFFD700),
-  Color(0xFF7FFF00),
-  Color(0xFFFF69B4),
-  Color(0xFF40E0D0),
+  Color(0xFFA855F7), // purple
+  Color(0xFFE040FB), // magenta
+  Color(0xFFEC4899), // rose
+  Color(0xFFFF4DA6), // pink
+  Color(0xFFFF69B4), // hot pink
 ];
 
 class EditHabitScreen extends ConsumerStatefulWidget {
   const EditHabitScreen({
     super.key,
     this.existing,
-    this.template,
     this.isFirstHabit = false,
+    this.prefillName,
+    this.prefillEmoji,
+    this.prefillColorHex,
+    this.prefillFrequencyType,
+    this.prefillFrequencyConfig,
+    this.prefillDescription,
   });
   final Habit? existing;
-
-  /// When set, pre-fills the form with template values (new habit flow).
-  /// Ignored when [existing] is non-null.
-  final HabitTemplate? template;
   final bool isFirstHabit;
+
+  /// Quick-start prefill (Home's empty-state cards) — ignored when
+  /// [existing] is non-null. Deliberately just these few loose fields
+  /// rather than a shared template model: there are only 3 quick-start
+  /// options and no browsable library behind them.
+  final String? prefillName;
+  final String? prefillEmoji;
+  final String? prefillColorHex;
+  final FrequencyType? prefillFrequencyType;
+  final FrequencyConfig? prefillFrequencyConfig;
+  final String? prefillDescription;
 
   @override
   ConsumerState<EditHabitScreen> createState() => _EditHabitScreenState();
@@ -87,7 +114,6 @@ class EditHabitScreen extends ConsumerStatefulWidget {
 class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
-  late final TextEditingController _emojiSearchController;
   late String _emoji;
   late Color _color;
   late FrequencyType _frequencyType;
@@ -95,52 +121,42 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
   late int _timesPerWeek;
   TimeOfDay? _reminderTime;
   bool _isSaving = false;
-  String _emojiFilter = '';
   String? _nameError;
 
-  bool get _isEditing => widget.existing != null;
+  String? _categoryId;
+  bool _isQuantityHabit = false;
+  late TextEditingController _targetUnitController;
+  int _targetCount = 1;
+  bool _isQuitHabit = false;
 
-  List<String> get _filteredEmojis {
-    if (_emojiFilter.isEmpty) return _emojiChoices;
-    return _emojiChoices.where((e) => e.contains(_emojiFilter)).toList();
-  }
+  bool get _isEditing => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
     final habit = widget.existing;
-    final tmpl = widget.template;
-    // Priority: existing habit > template > defaults.
+    // Priority: existing habit > quick-start prefill > defaults.
     _nameController = TextEditingController(
-      text: habit?.name ?? tmpl?.name ?? '',
+      text: habit?.name ?? widget.prefillName ?? '',
     );
     _descriptionController = TextEditingController(
-      text: habit?.description ?? tmpl?.description ?? '',
+      text: habit?.description ?? widget.prefillDescription ?? '',
     );
-    _emojiSearchController = TextEditingController();
-    _emoji = habit?.emoji ?? tmpl?.emoji ?? _emojiChoices.first;
+    _emoji = habit?.emoji ?? widget.prefillEmoji ?? _emojiChoices.first;
     _color = habit != null
         ? colorFromHex(habit.colorHex)
-        : tmpl != null
-        ? colorFromHex(tmpl.colorHex)
+        : widget.prefillColorHex != null
+        ? colorFromHex(widget.prefillColorHex!)
         : AppColors.accent;
     _frequencyType =
-        habit?.frequencyType ?? tmpl?.frequencyType ?? FrequencyType.daily;
-    final config = habit?.frequencyConfig;
-    if (config is WeekdaysConfig) {
-      _weekdays = config.weekdays.toSet();
-    } else if (tmpl?.weekdays != null) {
-      _weekdays = tmpl!.weekdays!.toSet();
-    } else {
-      _weekdays = {1, 2, 3, 4, 5};
-    }
-    if (config is XPerWeekConfig) {
-      _timesPerWeek = config.timesPerWeek;
-    } else if (tmpl?.timesPerWeek != null) {
-      _timesPerWeek = tmpl!.timesPerWeek!;
-    } else {
-      _timesPerWeek = 3;
-    }
+        habit?.frequencyType ??
+        widget.prefillFrequencyType ??
+        FrequencyType.daily;
+    final config = habit?.frequencyConfig ?? widget.prefillFrequencyConfig;
+    _weekdays = config is WeekdaysConfig
+        ? config.weekdays.toSet()
+        : {1, 2, 3, 4, 5};
+    _timesPerWeek = config is XPerWeekConfig ? config.timesPerWeek : 3;
     final reminder = habit?.reminderTime;
     if (reminder != null) {
       final parts = reminder.split(':');
@@ -149,14 +165,161 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         minute: int.parse(parts[1]),
       );
     }
+    _categoryId = habit?.categoryId;
+    _isQuantityHabit = habit?.isQuantityHabit ?? false;
+    _targetCount = habit?.targetCount ?? 8;
+    _targetUnitController = TextEditingController(
+      text: habit?.targetUnit ?? '',
+    );
+    _isQuitHabit = habit?.isQuitHabit ?? false;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
-    _emojiSearchController.dispose();
+    _targetUnitController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openEmojiPicker() async {
+    var filter = '';
+    final searchController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final surfaceElevated = isDark
+        ? AppColors.surfaceElevated
+        : AppColors.surfaceElevatedLight;
+    final border = isDark ? AppColors.border : AppColors.borderLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final filtered = filter.isEmpty
+                ? _emojiChoices
+                : _emojiChoices.where((e) => e.contains(filter)).toList();
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: textMuted.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Choose an icon',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: searchController,
+                    style: TextStyle(color: textPrimary, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Paste emoji to filter…',
+                      hintStyle: TextStyle(
+                        color: textMuted.withValues(alpha: 0.5),
+                        fontSize: 12,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: textMuted,
+                        size: 18,
+                      ),
+                      filled: true,
+                      fillColor: surfaceElevated,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: _color, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                    onChanged: (v) => setSheetState(() => filter = v),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 320,
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 7,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                          ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final e = filtered[i];
+                        final selected = e == _emoji;
+                        return GestureDetector(
+                          onTap: () => Navigator.of(sheetContext).pop(e),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              color: selected
+                                  ? _color.withValues(alpha: 0.15)
+                                  : surfaceElevated,
+                              border: Border.all(
+                                color: selected ? _color : border,
+                                width: selected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                e,
+                                style: const TextStyle(fontSize: 19),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchController.dispose();
+    if (picked != null) setState(() => _emoji = picked);
   }
 
   Future<void> _openColorPicker() async {
@@ -332,6 +495,14 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         frequencyConfig: _frequencyConfig,
         reminderTime: reminder,
         description: description.isEmpty ? null : description,
+        categoryId: _categoryId,
+        targetCount: _isQuantityHabit ? _targetCount : null,
+        targetUnit: _isQuantityHabit
+            ? (_targetUnitController.text.trim().isEmpty
+                  ? 'times'
+                  : _targetUnitController.text.trim())
+            : null,
+        isQuitHabit: _isQuitHabit,
       );
       habitId = created.id;
       final habitNumber = (await repo.watchActiveHabits().first).length;
@@ -349,6 +520,17 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         frequencyConfig: _frequencyConfig,
         reminderTime: reminder,
         description: description.isEmpty ? null : description,
+        categoryId: _categoryId,
+        clearCategoryId: _categoryId == null,
+        targetCount: _isQuantityHabit ? _targetCount : null,
+        clearTargetCount: !_isQuantityHabit,
+        targetUnit: _isQuantityHabit
+            ? (_targetUnitController.text.trim().isEmpty
+                  ? 'times'
+                  : _targetUnitController.text.trim())
+            : null,
+        clearTargetUnit: !_isQuantityHabit,
+        isQuitHabit: _isQuitHabit,
       );
       habitId = existing.id;
     }
@@ -453,13 +635,14 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
     final bgColor = isDark ? AppColors.background : AppColors.backgroundLight;
+    final border = isDark ? AppColors.border : AppColors.borderLight;
 
     final title = widget.isFirstHabit
         ? AppCopy.firstHabitHeadline
         : (_isEditing
               ? 'Edit habit'
-              : widget.template != null
-              ? 'New habit from template'
+              : widget.prefillName != null
+              ? 'New habit from quick start'
               : 'New habit');
 
     return Scaffold(
@@ -535,48 +718,26 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
         ],
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          8,
-          16,
-          120 + MediaQuery.of(context).padding.bottom,
-        ),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
-          // Name
+          // ── Hero: name + icon, tinted by the chosen color ─────────────────
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              EditSectionCard(
-                label: 'Habit name',
+              _HeroCard(
+                emoji: _emoji,
+                color: _color,
+                nameController: _nameController,
                 hasError: _nameError != null,
-                child: TextField(
-                  controller: _nameController,
-                  maxLength: 60,
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
-                  onChanged: (_) {
-                    if (_nameError != null) setState(() => _nameError = null);
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'e.g. Morning run, Read 20 pages…',
-                    hintStyle: TextStyle(
-                      color: textMuted.withValues(alpha: 0.6),
-                      fontWeight: FontWeight.w400,
-                    ),
-                    filled: true,
-                    fillColor: Colors.transparent,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    counterText: '',
-                  ),
-                ),
+                isDark: isDark,
+                onTapEmoji: _openEmojiPicker,
+                onNameChanged: () {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
               ),
               if (_nameError != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  padding: const EdgeInsets.only(top: 8, left: 4),
                   child: Row(
                     children: [
                       const Icon(
@@ -597,172 +758,38 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                   ),
                 ),
             ],
-          ).animate().fadeIn(delay: 50.ms).slideY(begin: 0.1),
+          ).animate().fadeIn(delay: 40.ms).slideY(begin: 0.1),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
 
-          // Description
+          // ── Color ──────────────────────────────────────────────────────────
+          _FormSectionHeader(
+            title: 'Color',
+            accent: _color,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 8),
           EditSectionCard(
-            label: 'Description (optional)',
-            child: TextField(
-              controller: _descriptionController,
-              maxLength: 200,
-              maxLines: 8,
-              minLines: 5,
-              style: TextStyle(
-                color: textPrimary,
-                fontWeight: FontWeight.w400,
-                fontSize: 14,
-                height: 1.5,
-              ),
-              decoration: InputDecoration(
-                hintText:
-                    'What do you want to track? e.g. Run at least 3 km every morning…',
-                hintStyle: TextStyle(
-                  color: textMuted.withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 13,
-                ),
-                filled: true,
-                fillColor: Colors.transparent,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                counterText: '',
-              ),
+            child: _ColorSwatchRow(
+              selected: _color,
+              onSelect: (c) => setState(() => _color = c),
+              onCustomTap: _openColorPicker,
+              isDark: isDark,
             ),
-          ).animate().fadeIn(delay: 80.ms).slideY(begin: 0.1),
+          ).animate().fadeIn(delay: 90.ms).slideY(begin: 0.1),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
 
-          // Emoji picker
+          // ── Frequency ────────────────────────────────────────────────────
+          _FormSectionHeader(
+            title: 'Frequency',
+            accent: _color,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 8),
           EditSectionCard(
-            label: 'Icon',
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: _color.withValues(alpha: 0.12),
-                        border: Border.all(
-                          color: _color.withValues(alpha: 0.35),
-                          width: 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _emoji,
-                          style: const TextStyle(fontSize: 25),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _emojiSearchController,
-                        style: TextStyle(color: textPrimary, fontSize: 13),
-                        decoration: InputDecoration(
-                          hintText: 'Paste emoji to filter…',
-                          hintStyle: TextStyle(
-                            color: textMuted.withValues(alpha: 0.5),
-                            fontSize: 12,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            color: textMuted,
-                            size: 18,
-                          ),
-                          filled: true,
-                          fillColor: isDark
-                              ? AppColors.surfaceElevated
-                              : AppColors.surfaceElevatedLight,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? AppColors.border
-                                  : AppColors.borderLight,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? AppColors.border
-                                  : AppColors.borderLight,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: _color, width: 1.5),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                        ),
-                        onChanged: (v) => setState(() => _emojiFilter = v),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 220,
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 7,
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                        ),
-                    itemCount: _filteredEmojis.length,
-                    itemBuilder: (context, i) {
-                      final e = _filteredEmojis[i];
-                      final selected = e == _emoji;
-                      return GestureDetector(
-                        onTap: () => setState(() => _emoji = e),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: selected
-                                ? _color.withValues(alpha: 0.15)
-                                : isDark
-                                ? AppColors.surfaceElevated
-                                : AppColors.surfaceElevatedLight,
-                            border: Border.all(
-                              color: selected
-                                  ? _color
-                                  : isDark
-                                  ? AppColors.border
-                                  : AppColors.borderLight,
-                              width: selected ? 1.5 : 1,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              e,
-                              style: const TextStyle(fontSize: 19),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
-
-          const SizedBox(height: 12),
-
-          // Frequency
-          EditSectionCard(
-            label: 'Frequency',
             child: Column(
               children: [
                 SegmentedButton<FrequencyType>(
@@ -794,13 +821,148 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                 ],
               ],
             ),
-          ).animate().fadeIn(delay: 150.ms).slideY(begin: 0.1),
+          ).animate().fadeIn(delay: 140.ms).slideY(begin: 0.1),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
 
-          // Reminder
+          // ── Details: category + quantity + quit-habit mode ──────────────
+          _FormSectionHeader(
+            title: 'Details',
+            subtitle: 'Category & type',
+            accent: _color,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 8),
           EditSectionCard(
-            label: 'Reminder',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CATEGORY',
+                  style: TextStyle(
+                    color: textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _CategoryPicker(
+                  selectedId: _categoryId,
+                  accentColor: _color,
+                  onSelected: (id) => setState(() => _categoryId = id),
+                ),
+                const Divider(height: 32),
+                Material(
+                  type: MaterialType.transparency,
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _isQuantityHabit,
+                    activeThumbColor: _color,
+                    title: Text(
+                      'Track a number',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'e.g. "8 glasses" instead of a plain yes/no',
+                      style: TextStyle(color: textMuted, fontSize: 12),
+                    ),
+                    onChanged: (v) => setState(() => _isQuantityHabit = v),
+                  ),
+                ),
+                if (_isQuantityHabit) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        'Target: $_targetCount',
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const Spacer(),
+                      EditCounterButton(
+                        icon: Icons.remove_rounded,
+                        onPressed: _targetCount > 1
+                            ? () => setState(() => _targetCount--)
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      EditCounterButton(
+                        icon: Icons.add_rounded,
+                        onPressed: () => setState(() => _targetCount++),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _targetUnitController,
+                    style: TextStyle(color: textPrimary, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Unit — e.g. glasses, pages, minutes',
+                      hintStyle: TextStyle(
+                        color: textMuted.withValues(alpha: 0.6),
+                        fontSize: 13,
+                      ),
+                      filled: true,
+                      fillColor: isDark
+                          ? AppColors.surfaceElevated
+                          : AppColors.surfaceElevatedLight,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                ],
+                const Divider(height: 24),
+                Material(
+                  type: MaterialType.transparency,
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _isQuitHabit,
+                    activeThumbColor: _color,
+                    title: Text(
+                      'This is a habit I\'m quitting',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Framed as "days clean" instead of a streak',
+                      style: TextStyle(color: textMuted, fontSize: 12),
+                    ),
+                    onChanged: (v) => setState(() => _isQuitHabit = v),
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 190.ms).slideY(begin: 0.1),
+
+          const SizedBox(height: 22),
+
+          // ── Reminder ─────────────────────────────────────────────────────
+          _FormSectionHeader(
+            title: 'Reminder',
+            accent: _color,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 8),
+          EditSectionCard(
             child: Row(
               children: [
                 Container(
@@ -825,6 +987,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                     style: TextStyle(
                       color: _reminderTime != null ? textPrimary : textMuted,
                       fontWeight: FontWeight.w500,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -850,105 +1013,74 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                     style: TextStyle(
                       color: _color,
                       fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
                   ),
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
+          ).animate().fadeIn(delay: 240.ms).slideY(begin: 0.1),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
 
-          // Color
+          // ── Description ──────────────────────────────────────────────────
+          _FormSectionHeader(
+            title: 'Description',
+            subtitle: 'Optional',
+            accent: _color,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 8),
           EditSectionCard(
-            label: 'Color',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _presetColors.map((c) {
-                    final selected = c.toARGB32() == _color.toARGB32();
-                    return GestureDetector(
-                      onTap: () => setState(() => _color = c),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: c,
-                          border: Border.all(
-                            color: selected
-                                ? (isDark ? Colors.white : Colors.black)
-                                : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: selected
-                            ? Icon(
-                                Icons.check_rounded,
-                                color: isDark ? Colors.black : Colors.white,
-                                size: 18,
-                              )
-                            : null,
-                      ),
-                    );
-                  }).toList(),
+            child: TextField(
+              controller: _descriptionController,
+              maxLength: 200,
+              maxLines: 6,
+              minLines: 3,
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              decoration: InputDecoration(
+                hintText:
+                    'What do you want to track? e.g. Run at least 3 km every morning…',
+                hintStyle: TextStyle(
+                  color: textMuted.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w400,
+                  fontSize: 13,
                 ),
-                const SizedBox(height: 14),
-                GestureDetector(
-                  onTap: _openColorPicker,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: _color.withValues(alpha: 0.08),
-                      border: Border.all(
-                        color: _color.withValues(alpha: 0.35),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _color,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Custom color  →  #${colorToHex(_color).toUpperCase()}',
-                          style: TextStyle(
-                            color: _color,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                filled: true,
+                fillColor: Colors.transparent,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                counterText: '',
+              ),
             ),
-          ).animate().fadeIn(delay: 250.ms).slideY(begin: 0.1),
+          ).animate().fadeIn(delay: 280.ms).slideY(begin: 0.1),
         ],
       ),
-      floatingActionButton: EditSaveFab(
-        isEditing: _isEditing,
-        isSaving: _isSaving,
-        accentColor: _color,
-        onPressed: _save,
-      ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.3),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      // Docked to the bottom, same anchoring as the sign-in screen's
+      // Google button — a fixed bar with a top border, not a floating
+      // button hovering over the scroll content.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+          decoration: BoxDecoration(
+            color: bgColor,
+            border: Border(top: BorderSide(color: border)),
+          ),
+          child: EditSaveButton(
+            isEditing: _isEditing,
+            isSaving: _isSaving,
+            accentColor: _color,
+            onPressed: _save,
+          ),
+        ),
+      ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2, end: 0),
     );
   }
 
@@ -994,6 +1126,491 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
           onPressed: _timesPerWeek < 7
               ? () => setState(() => _timesPerWeek++)
               : null,
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Hero card ────────────────────────────────────────────────────────────────
+//
+// The habit's name and icon, front and center — tinted by the chosen
+// accent color so the whole screen reads as "building this specific
+// habit" rather than a generic settings form. Tapping the emoji opens the
+// icon picker sheet ([_EditHabitScreenState._openEmojiPicker]); color is
+// chosen just below via [_ColorSwatchRow].
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
+    required this.emoji,
+    required this.color,
+    required this.nameController,
+    required this.hasError,
+    required this.isDark,
+    required this.onTapEmoji,
+    required this.onNameChanged,
+  });
+
+  final String emoji;
+  final Color color;
+  final TextEditingController nameController;
+  final bool hasError;
+  final bool isDark;
+  final VoidCallback onTapEmoji;
+  final VoidCallback onNameChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final tinted = Color.alphaBlend(
+      color.withValues(alpha: isDark ? 0.16 : 0.10),
+      base,
+    );
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tinted,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: hasError ? AppColors.danger : color.withValues(alpha: 0.3),
+          width: hasError ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: onTapEmoji,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: isDark ? 0.22 : 0.16),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                  ),
+                ),
+                Positioned(
+                  bottom: -2,
+                  right: -2,
+                  child: Container(
+                    width: 17,
+                    height: 17,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                      border: Border.all(color: tinted, width: 1.5),
+                    ),
+                    child: Icon(
+                      Icons.edit_rounded,
+                      size: 9,
+                      color: contrastForeground(color),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: nameController,
+              maxLength: 60,
+              onChanged: (_) => onNameChanged(),
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                letterSpacing: -0.1,
+              ),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: 'Name your habit',
+                hintStyle: TextStyle(
+                  color: textMuted.withValues(alpha: 0.55),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+                counterText: '',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Form section header ──────────────────────────────────────────────────────
+//
+// Same visual language as Analytics/Habit Detail's section headers — a
+// colored bar + title — so this screen reads as part of the same app
+// instead of inventing its own typographic system.
+class _FormSectionHeader extends StatelessWidget {
+  const _FormSectionHeader({
+    required this.title,
+    this.subtitle,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Container(
+          width: 3,
+          height: 13,
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.1,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(width: 6),
+          Text(subtitle!, style: TextStyle(color: textMuted, fontSize: 11)),
+        ],
+      ],
+    );
+  }
+}
+
+// ─── Color swatch row ──────────────────────────────────────────────────────────
+//
+// The 16 presets as a compact inline strip (not a whole card of their
+// own) plus one more swatch for "custom" — filled with the current color
+// and a check when it's a custom pick, an outlined pipette otherwise —
+// opening the full HSV picker on tap.
+class _ColorSwatchRow extends StatelessWidget {
+  const _ColorSwatchRow({
+    required this.selected,
+    required this.onSelect,
+    required this.onCustomTap,
+    required this.isDark,
+  });
+
+  final Color selected;
+  final ValueChanged<Color> onSelect;
+  final VoidCallback onCustomTap;
+  final bool isDark;
+
+  bool get _isPreset =>
+      _presetColors.any((c) => c.toARGB32() == selected.toARGB32());
+
+  @override
+  Widget build(BuildContext context) {
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final border = isDark ? AppColors.border : AppColors.borderLight;
+    final surfaceElevated = isDark
+        ? AppColors.surfaceElevated
+        : AppColors.surfaceElevatedLight;
+    final isCustom = !_isPreset;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ..._presetColors.map((c) {
+          final isSelected = c.toARGB32() == selected.toARGB32();
+          return GestureDetector(
+            onTap: () => onSelect(c),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: c,
+                border: Border.all(
+                  color: isSelected
+                      ? (isDark ? Colors.white : Colors.black)
+                      : Colors.transparent,
+                  width: 1.5,
+                ),
+              ),
+              child: isSelected
+                  ? Icon(
+                      Icons.check_rounded,
+                      color: isDark ? Colors.black : Colors.white,
+                      size: 12,
+                    )
+                  : null,
+            ),
+          );
+        }),
+        GestureDetector(
+          onTap: onCustomTap,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isCustom ? selected : surfaceElevated,
+              border: Border.all(
+                color: isCustom
+                    ? (isDark ? Colors.white : Colors.black)
+                    : border,
+                width: isCustom ? 1.5 : 1,
+              ),
+            ),
+            child: Icon(
+              isCustom ? Icons.check_rounded : Icons.colorize_rounded,
+              size: isCustom ? 12 : 11,
+              color: isCustom ? contrastForeground(selected) : textMuted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Category picker ────────────────────────────────────────────────────────
+//
+// Predefined categories + the user's own custom ones, with a "+ New" chip
+// that opens a small creation sheet (name + emoji + color, reusing the
+// same emoji list and color presets already built for habits themselves).
+class _CategoryPicker extends ConsumerWidget {
+  const _CategoryPicker({
+    required this.selectedId,
+    required this.accentColor,
+    required this.onSelected,
+  });
+
+  final String? selectedId;
+  final Color accentColor;
+  final ValueChanged<String?> onSelected;
+
+  Future<void> _createCategory(BuildContext context, WidgetRef ref) async {
+    final nameController = TextEditingController();
+    String emoji = '🔖';
+    Color color = accentColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: 20 + MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'New category',
+                style: TextStyle(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 90,
+                    child: TextField(
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 22),
+                      decoration: const InputDecoration(labelText: 'Emoji'),
+                      controller: TextEditingController(text: emoji),
+                      onChanged: (v) => setSheetState(
+                        () => emoji = v.isEmpty ? '🔖' : v.characters.first,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: nameController,
+                      maxLength: 30,
+                      style: TextStyle(color: textPrimary),
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _presetColors.map((c) {
+                  final selected = c.toARGB32() == color.toARGB32();
+                  return GestureDetector(
+                    onTap: () => setSheetState(() => color = c),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: c,
+                        border: Border.all(
+                          color: selected
+                              ? (isDark ? Colors.white : Colors.black)
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: nameController.text.trim().isEmpty
+                      ? null
+                      : () => Navigator.of(sheetContext).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Create category',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              SizedBox(height: MediaQuery.of(sheetContext).padding.bottom),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (created != true) return;
+    final name = nameController.text.trim();
+    if (name.isEmpty) return;
+    final category = await ref
+        .read(habitRepositoryProvider)
+        .createCategory(name: name, emoji: emoji, colorHex: colorToHex(color));
+    onSelected(category.id);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final categories = ref.watch(categoriesProvider).valueOrNull ?? const [];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final category in categories)
+          GestureDetector(
+            onTap: () =>
+                onSelected(selectedId == category.id ? null : category.id),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: selectedId == category.id
+                    ? colorFromHex(category.colorHex).withValues(alpha: 0.18)
+                    : (isDark
+                          ? AppColors.surfaceElevated
+                          : AppColors.surfaceElevatedLight),
+                border: Border.all(
+                  color: selectedId == category.id
+                      ? colorFromHex(category.colorHex)
+                      : (isDark ? AppColors.border : AppColors.borderLight),
+                  width: selectedId == category.id ? 1.5 : 1,
+                ),
+              ),
+              child: Text(
+                '${category.emoji} ${category.name}',
+                style: TextStyle(
+                  color: selectedId == category.id ? textPrimary : textMuted,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+          ),
+        GestureDetector(
+          onTap: () => _createCategory(context, ref),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppColors.border : AppColors.borderLight,
+                style: BorderStyle.solid,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 14, color: textMuted),
+                const SizedBox(width: 3),
+                Text(
+                  'New',
+                  style: TextStyle(
+                    color: textMuted,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );

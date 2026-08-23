@@ -8,6 +8,7 @@ import '../../../core/utils/local_date.dart';
 import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
+import '../domain/habit_category.dart';
 import '../domain/streak_calculator.dart';
 import 'habit_detail_screen.dart';
 
@@ -60,6 +61,11 @@ class HabitTile extends ConsumerWidget {
         streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
     final isOnFire = currentStreak >= 7;
     final isScheduledToday = habit.isScheduledOnWeekday(DateTime.now().weekday);
+    final category = habit.categoryId == null
+        ? null
+        : (ref.watch(categoriesProvider).valueOrNull ?? const [])
+              .cast<HabitCategory?>()
+              .firstWhere((c) => c!.id == habit.categoryId, orElse: () => null);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -173,6 +179,17 @@ class HabitTile extends ConsumerWidget {
                                     fontSize: 9,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                              if (category != null) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colorFromHex(category.colorHex),
                                   ),
                                 ),
                               ],
@@ -361,6 +378,7 @@ class _TileMiniGridPainter extends CustomPainter {
           case DayStatus.missed:
             color = missedColor;
           case DayStatus.notApplicable:
+          case DayStatus.skipped:
           case DayStatus.future:
             color = futureColor;
         }

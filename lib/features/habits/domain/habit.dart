@@ -19,6 +19,10 @@ class Habit {
     this.archivedAt,
     required this.updatedAt,
     this.sortOrder = 0,
+    this.categoryId,
+    this.targetCount,
+    this.targetUnit,
+    this.isQuitHabit = false,
   });
 
   final String id;
@@ -42,6 +46,23 @@ class Habit {
 
   /// Feature 6 – Drag-to-reorder: position index; lower = higher in list.
   final int sortOrder;
+
+  /// Either a [kPredefinedCategories] id or a persisted custom category's
+  /// id. Null means uncategorized.
+  final String? categoryId;
+
+  /// Non-null makes this a quantity habit (e.g. "8 glasses") rather than a
+  /// plain yes/no one — [targetUnit] is the free-text unit label. Both are
+  /// null/non-null together.
+  final int? targetCount;
+  final String? targetUnit;
+
+  bool get isQuantityHabit => targetCount != null;
+
+  /// A habit being *quit* rather than built — changes copy/framing only
+  /// (Habit Detail's "Days Clean" labeling); the underlying streak/status
+  /// plumbing is identical to a normal habit.
+  final bool isQuitHabit;
 
   bool get isArchived => archivedAt != null;
 
@@ -72,6 +93,13 @@ class Habit {
     bool clearArchivedAt = false,
     required DateTime updatedAt,
     int? sortOrder,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool? isQuitHabit,
   }) {
     return Habit(
       id: id,
@@ -88,6 +116,12 @@ class Habit {
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       updatedAt: updatedAt,
       sortOrder: sortOrder ?? this.sortOrder,
+      categoryId: clearCategoryId ? null : (categoryId ?? this.categoryId),
+      targetCount: clearTargetCount
+          ? null
+          : (targetCount ?? this.targetCount),
+      targetUnit: clearTargetUnit ? null : (targetUnit ?? this.targetUnit),
+      isQuitHabit: isQuitHabit ?? this.isQuitHabit,
     );
   }
 }

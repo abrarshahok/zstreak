@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
@@ -15,10 +16,14 @@ import '../../monetization/presentation/paywall_navigation.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
+import '../domain/check_in.dart';
+import '../domain/check_in_status.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
+import '../domain/habit_category.dart';
 import '../domain/streak_calculator.dart';
 import 'edit_habit_screen.dart';
+import 'widgets/year_heatmap.dart';
 
 /// Minimal flat Habit Detail screen.
 /// No gradients, no glow — clean typography, flat cards, thin borders.
@@ -103,6 +108,15 @@ class HabitDetailScreen extends ConsumerWidget {
 
     final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
+    // Feature 2 – Habit Notes: keyed by date so the monthly grid can show a
+    // note dot and the day-action sheet can prefill an existing note/value.
+    final checkInsByDate = <String, CheckIn>{
+      for (final c
+          in ref.watch(habitCheckInsProvider(currentHabit.id)).valueOrNull ??
+              const <CheckIn>[])
+        c.date: c,
+    };
+
     // Same check-in toggle HabitTile/HabitGridCard have on Home — this
     // screen had no quick way to check today off without scrolling down
     // to the calendar grid and tapping today's cell. Independent of
@@ -175,7 +189,9 @@ class HabitDetailScreen extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: _StatCard(
-                            label: 'Current Streak',
+                            label: currentHabit.isQuitHabit
+                                ? 'Days Clean'
+                                : 'Current Streak',
                             value: '${result.currentStreak}',
                             suffix: 'days',
                             icon: '🔥',
@@ -245,6 +261,33 @@ class HabitDetailScreen extends ConsumerWidget {
                         ).animate().fadeIn(delay: 210.ms),
                       ),
 
+                    if (currentHabit.isQuantityHabit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: _QuantityProgressCard(
+                          habit: currentHabit,
+                          value: checkIn.valueOrNull?.value ?? 0,
+                          surface: surface,
+                          border: border,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          accentColor: accentColor,
+                          onChange: (newValue) async {
+                            final target = currentHabit.targetCount ?? 1;
+                            await ref
+                                .read(habitRepositoryProvider)
+                                .setCheckIn(
+                                  habitId: currentHabit.id,
+                                  date: today,
+                                  status: newValue >= target
+                                      ? CheckInStatus.completed
+                                      : CheckInStatus.missed,
+                                  value: newValue,
+                                );
+                          },
+                        ).animate().fadeIn(delay: 220.ms),
+                      ),
+
                     if (currentHabit.frequencyType == FrequencyType.xPerWeek)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -309,6 +352,7 @@ class HabitDetailScreen extends ConsumerWidget {
                       textPrimary: textPrimary,
                       textMuted: textMuted,
                       isPro: isPro,
+                      checkInsByDate: checkInsByDate,
                     ).animate().fadeIn(delay: 280.ms),
 
                     const SizedBox(height: 24),
@@ -348,6 +392,33 @@ class HabitDetailScreen extends ConsumerWidget {
                         textPrimary: textPrimary,
                       ),
                     ).animate().fadeIn(delay: 440.ms),
+
+                    const SizedBox(height: 20),
+
+                    // ── This year ───────────────────────────────────────────
+                    _SectionLabel(
+                      label: 'This Year',
+                      textMuted: textMuted,
+                    ).animate().fadeIn(delay: 480.ms),
+                    const SizedBox(height: 8),
+                    _FlatCard(
+                      surface: surface,
+                      border: border,
+                      child: YearHeatmap(
+                        intensityByDate: {
+                          for (final d in result.days)
+                            if (d.status == DayStatus.completed)
+                              '${d.date.year.toString().padLeft(4, '0')}-${d.date.month.toString().padLeft(2, '0')}-${d.date.day.toString().padLeft(2, '0')}':
+                                  (d.runLength / 7).clamp(0.4, 1.0),
+                        },
+                        accent: accentColor,
+                        emptyColor: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.05),
+                        textPrimary: textPrimary,
+                        textMuted: textMuted,
+                      ),
+                    ).animate().fadeIn(delay: 500.ms),
 
                     const SizedBox(height: 24),
 
@@ -403,7 +474,9 @@ class HabitDetailScreen extends ConsumerWidget {
     // exactly 7 (today - 6 days ago).
     final firstDate = isPro
         ? DateTime(2000, 1, 1)
-        : today.subtract(const Duration(days: 6));
+        : today.subtract(
+            const Duration(days: AppConfig.freeTierBackfillDays - 1),
+          );
 
     final lastDate = today.subtract(const Duration(days: 1));
 
@@ -453,17 +526,230 @@ class HabitDetailScreen extends ConsumerWidget {
       selectableDayPredicate: (day) => habit.isScheduledOnWeekday(day.weekday),
     );
     if (picked == null) return;
-    // Do NOT guard setCheckIn with context.mounted — setCheckIn doesn't use
-    // context, and the guard was causing silent no-ops when the ConsumerWidget
-    // rebuilt (e.g. from a streakDetailProvider emission) while the date
-    // picker was open, making context.mounted return false.
-    await ref
+    if (!context.mounted) return;
+    final dateKey = localDateString(picked);
+    final existing = await ref
         .read(habitRepositoryProvider)
-        .setCheckIn(
-          habitId: habit.id,
-          date: localDateString(picked),
-          completed: true,
-        );
+        .watchCheckIn(habitId: habit.id, date: dateKey)
+        .first;
+    if (!context.mounted) return;
+    await showDayActionSheet(
+      context,
+      ref,
+      habit: habit,
+      date: dateKey,
+      existing: existing,
+    );
+  }
+}
+
+// ─── Day action sheet (Complete / Skip / Clear + note + quantity) ─────────────
+//
+// Feature 2 – Habit Notes, plus the "skip" tri-state and quantity-habit
+// value entry — all three are extensions of "log a specific day," so they
+// share one bottom sheet rather than three separate flows. Reachable from
+// the monthly grid (long-press a day) and from "Log a past day."
+Future<void> showDayActionSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  required Habit habit,
+  required String date,
+  required CheckIn? existing,
+}) async {
+  final noteController = TextEditingController(text: existing?.note ?? '');
+  final valueController = TextEditingController(
+    text: existing?.value?.toString() ?? '',
+  );
+  CheckInStatus? chosen;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+  final textPrimary = isDark
+      ? AppColors.textPrimary
+      : AppColors.textPrimaryLight;
+  final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+  final accent = colorFromHex(habit.colorHex);
+  final parsed = DateTime.parse(date);
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.of(sheetContext).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${_weekdayName(parsed.weekday)}, ${_monthName(parsed.month)} ${parsed.day}',
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${habit.emoji}  ${habit.name}',
+              style: TextStyle(color: textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _DaySheetActionButton(
+                    label: habit.isQuitHabit ? 'Stayed strong' : 'Complete',
+                    icon: Icons.check_rounded,
+                    color: accent,
+                    onTap: () {
+                      chosen = CheckInStatus.completed;
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _DaySheetActionButton(
+                    label: 'Skip',
+                    icon: Icons.remove_rounded,
+                    color: textMuted,
+                    onTap: () {
+                      chosen = CheckInStatus.skipped;
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _DaySheetActionButton(
+                    label: habit.isQuitHabit ? 'Slipped' : 'Clear',
+                    icon: Icons.close_rounded,
+                    color: AppColors.danger,
+                    onTap: () {
+                      chosen = CheckInStatus.missed;
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (habit.isQuantityHabit) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: valueController,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: textPrimary),
+                decoration: InputDecoration(
+                  labelText:
+                      'Logged ${habit.targetUnit ?? "amount"} (target ${habit.targetCount})',
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLength: 200,
+              maxLines: 2,
+              style: TextStyle(color: textPrimary),
+              decoration: const InputDecoration(labelText: 'Note (optional)'),
+            ),
+            const SizedBox(height: 4),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (chosen == null) return;
+  final note = noteController.text.trim();
+  final value = int.tryParse(valueController.text.trim());
+  await ref
+      .read(habitRepositoryProvider)
+      .setCheckIn(
+        habitId: habit.id,
+        date: date,
+        status: chosen!,
+        note: note.isEmpty ? null : note,
+        value: habit.isQuantityHabit ? value : null,
+      );
+}
+
+const _weekdayNames = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+const _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+String _weekdayName(int weekday) => _weekdayNames[weekday - 1];
+String _monthName(int month) => _monthNames[month - 1];
+
+class _DaySheetActionButton extends StatelessWidget {
+  const _DaySheetActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+          color: color.withValues(alpha: 0.08),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -591,6 +877,7 @@ class _MonthlyContributionGrid extends ConsumerStatefulWidget {
     required this.textPrimary,
     required this.textMuted,
     required this.isPro,
+    required this.checkInsByDate,
   });
 
   final Habit habit;
@@ -602,6 +889,10 @@ class _MonthlyContributionGrid extends ConsumerStatefulWidget {
   final bool isDark;
   final Color textPrimary;
   final Color textMuted;
+
+  /// "YYYY-MM-DD" → that day's check-in, so the grid can show a note dot
+  /// and the day-action sheet can prefill an existing note/value.
+  final Map<String, CheckIn> checkInsByDate;
 
   @override
   ConsumerState<_MonthlyContributionGrid> createState() =>
@@ -722,7 +1013,9 @@ class _MonthlyContributionGridState
           .setCheckIn(
             habitId: widget.habit.id,
             date: key,
-            completed: currentStatus != DayStatus.completed,
+            status: currentStatus != DayStatus.completed
+                ? CheckInStatus.completed
+                : CheckInStatus.missed,
           );
     } finally {
       _pendingToggles.remove(key);
@@ -742,7 +1035,7 @@ class _MonthlyContributionGridState
       today.year,
       today.month,
       today.day,
-    ).subtract(const Duration(days: 6));
+    ).subtract(const Duration(days: AppConfig.freeTierBackfillDays - 1));
     return date.isBefore(oldestFreeDate);
   }
 
@@ -756,6 +1049,25 @@ class _MonthlyContributionGridState
       return;
     }
     await _toggleDay(date, currentStatus);
+  }
+
+  Future<void> _handleDayLongPress(
+    DateTime date,
+    DayStatus? currentStatus,
+  ) async {
+    if (!widget.habit.isScheduledOnWeekday(date.weekday)) return;
+    if (_isDateLocked(date)) {
+      await navigateToPaywall(context, ref);
+      return;
+    }
+    final key = _dateKey(date);
+    await showDayActionSheet(
+      context,
+      ref,
+      habit: widget.habit,
+      date: key,
+      existing: widget.checkInsByDate[key],
+    );
   }
 
   Widget _buildMonthGrid(int pageIndex) {
@@ -821,6 +1133,9 @@ class _MonthlyContributionGridState
                   final dayStatus = statusMap[key];
                   final isToday = todayKey == key;
                   final isFuture = date.isAfter(today);
+                  final isScheduled = widget.habit.isScheduledOnWeekday(
+                    date.weekday,
+                  );
                   return _DayCell(
                     dayNum: dayNum,
                     status: dayStatus?.status,
@@ -832,11 +1147,13 @@ class _MonthlyContributionGridState
                     isDark: widget.isDark,
                     cellSize: cellSize,
                     gap: cellGap,
-                    onTap:
-                        (isFuture ||
-                            !widget.habit.isScheduledOnWeekday(date.weekday))
+                    hasNote: widget.checkInsByDate[key]?.note != null,
+                    onTap: (isFuture || !isScheduled)
                         ? null
                         : () => _handleDayTap(date, dayStatus?.status),
+                    onLongPress: (isFuture || !isScheduled)
+                        ? null
+                        : () => _handleDayLongPress(date, dayStatus?.status),
                   );
                 }),
               );
@@ -972,6 +1289,8 @@ class _DayCell extends StatelessWidget {
     required this.cellSize,
     required this.gap,
     this.onTap,
+    this.onLongPress,
+    this.hasNote = false,
   });
 
   final int dayNum;
@@ -985,6 +1304,10 @@ class _DayCell extends StatelessWidget {
   final double cellSize;
   final double gap;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Feature 2 – Habit Notes: shows a small dot when this day has one.
+  final bool hasNote;
 
   @override
   Widget build(BuildContext context) {
@@ -1001,6 +1324,11 @@ class _DayCell extends StatelessWidget {
             ? Colors.white.withValues(alpha: 0.08)
             : Colors.black.withValues(alpha: 0.07);
         textColor = textMuted;
+      case DayStatus.skipped:
+        bgColor = isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.05);
+        textColor = textMuted.withValues(alpha: 0.7);
       case DayStatus.future:
       case DayStatus.notApplicable:
       case null:
@@ -1012,6 +1340,7 @@ class _DayCell extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: cellSize,
@@ -1022,15 +1351,31 @@ class _DayCell extends StatelessWidget {
           color: bgColor,
           border: isToday ? Border.all(color: accentColor, width: 1.5) : null,
         ),
-        child: Center(
-          child: Text(
-            '$dayNum',
-            style: TextStyle(
-              color: textColor,
-              fontSize: 9,
-              fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Text(
+              '$dayNum',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 9,
+                fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
+              ),
             ),
-          ),
+            if (hasNote)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: textColor.withValues(alpha: 0.9),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1079,7 +1424,7 @@ class _NavArrow extends StatelessWidget {
 
 // ─── Hero Header ──────────────────────────────────────────────────────────────
 
-class _HeroHeader extends StatelessWidget {
+class _HeroHeader extends ConsumerWidget {
   const _HeroHeader({
     required this.habit,
     required this.accentColor,
@@ -1101,7 +1446,7 @@ class _HeroHeader extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bg = isDark ? AppColors.background : AppColors.backgroundLight;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
@@ -1109,6 +1454,11 @@ class _HeroHeader extends StatelessWidget {
         ? AppColors.textPrimary
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final category = habit.categoryId == null
+        ? null
+        : (ref.watch(categoriesProvider).valueOrNull ?? const [])
+              .cast<HabitCategory?>()
+              .firstWhere((c) => c!.id == habit.categoryId, orElse: () => null);
 
     return SliverAppBar(
       expandedHeight: 140,
@@ -1278,6 +1628,25 @@ class _HeroHeader extends StatelessWidget {
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                            if (category != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  color: textMuted.withValues(alpha: 0.1),
+                                ),
+                                child: Text(
+                                  '${category.emoji} ${category.name}',
+                                  style: TextStyle(
+                                    color: textMuted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                           ],
@@ -1531,6 +1900,125 @@ class _StatCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Quantity Progress Card ───────────────────────────────────────────────────
+
+/// Today's tally for a quantity habit (e.g. "3 / 8 glasses") — a stepper
+/// rather than the plain check-in toggle, since "done" here means "reached
+/// the target," not "tapped once."
+class _QuantityProgressCard extends StatelessWidget {
+  const _QuantityProgressCard({
+    required this.habit,
+    required this.value,
+    required this.surface,
+    required this.border,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.accentColor,
+    required this.onChange,
+  });
+
+  final Habit habit;
+  final int value;
+  final Color surface;
+  final Color border;
+  final Color textPrimary;
+  final Color textMuted;
+  final Color accentColor;
+  final ValueChanged<int> onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final target = habit.targetCount ?? 1;
+    final unit = habit.targetUnit ?? 'today';
+    final ratio = (value / target).clamp(0.0, 1.0);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: surface,
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(
+                  color: textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                ),
+              ),
+              Text(
+                ' / $target $unit today',
+                style: TextStyle(color: textMuted, fontSize: 13),
+              ),
+              const Spacer(),
+              _StepperButton(
+                icon: Icons.remove_rounded,
+                color: textMuted,
+                onTap: value > 0 ? () => onChange(value - 1) : null,
+              ),
+              const SizedBox(width: 8),
+              _StepperButton(
+                icon: Icons.add_rounded,
+                color: accentColor,
+                onTap: () => onChange(value + 1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 6,
+              backgroundColor: border,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  const _StepperButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: enabled ? 1 : 0.3)),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: color.withValues(alpha: enabled ? 1 : 0.3),
+        ),
       ),
     );
   }

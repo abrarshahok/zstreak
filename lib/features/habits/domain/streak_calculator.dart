@@ -1,11 +1,14 @@
 import '../../../core/utils/local_date.dart';
+import 'check_in_status.dart';
 import 'frequency.dart';
 
 /// Per-day classification used by the contribution grid. `notApplicable`
 /// covers both "before this habit existed" and, for weekday-scheduled
 /// habits, non-scheduled days — spec Section 5a says both must render as
-/// neutral, never as a miss.
-enum DayStatus { notApplicable, missed, completed, future }
+/// neutral, never as a miss. `skipped` is a deliberate user action (see
+/// [CheckInStatus]) that behaves like `notApplicable` for streak/rate math
+/// but renders distinctly.
+enum DayStatus { notApplicable, missed, completed, skipped, future }
 
 class HabitDayStatus {
   const HabitDayStatus({
@@ -34,7 +37,7 @@ class StreakResult {
   final List<HabitDayStatus> days;
 
   /// Completed / (completed + missed) — Section 3b's "completion %",
-  /// excluding not-applicable and not-yet-arrived days.
+  /// excluding not-applicable, skipped, and not-yet-arrived days.
   double get completionRate {
     final completed = days.where((d) => d.status == DayStatus.completed).length;
     final missed = days.where((d) => d.status == DayStatus.missed).length;
@@ -55,7 +58,7 @@ class StreakCalculator {
     required FrequencyType frequencyType,
     required FrequencyConfig frequencyConfig,
     required DateTime createdAtLocal,
-    required Set<String> completedDates,
+    required Map<String, CheckInStatus> statusByDate,
     required DateTime today,
   }) {
     switch (frequencyType) {
@@ -63,7 +66,7 @@ class StreakCalculator {
         return _computeDaily(
           isScheduled: (_) => true,
           createdAtLocal: createdAtLocal,
-          completedDates: completedDates,
+          statusByDate: statusByDate,
           today: today,
         );
       case FrequencyType.weekdays:
@@ -71,14 +74,14 @@ class StreakCalculator {
         return _computeDaily(
           isScheduled: (day) => weekdays.contains(day.weekday),
           createdAtLocal: createdAtLocal,
-          completedDates: completedDates,
+          statusByDate: statusByDate,
           today: today,
         );
       case FrequencyType.xPerWeek:
         return _computeXPerWeek(
           config: frequencyConfig as XPerWeekConfig,
           createdAtLocal: createdAtLocal,
-          completedDates: completedDates,
+          statusByDate: statusByDate,
           today: today,
         );
     }
@@ -89,7 +92,7 @@ class StreakCalculator {
   static StreakResult _computeDaily({
     required bool Function(DateTime day) isScheduled,
     required DateTime createdAtLocal,
-    required Set<String> completedDates,
+    required Map<String, CheckInStatus> statusByDate,
     required DateTime today,
   }) {
     final createdDateOnly = DateTime(
@@ -97,7 +100,7 @@ class StreakCalculator {
       createdAtLocal.month,
       createdAtLocal.day,
     );
-    final start = _earliestRelevantDate(createdDateOnly, completedDates);
+    final start = _earliestRelevantDate(createdDateOnly, statusByDate.keys);
     final end = DateTime(today.year, today.month, today.day);
 
     var streak = 0;
@@ -116,10 +119,13 @@ class StreakCalculator {
       }
 
       final dateStr = localDateString(day);
-      final isCompleted = completedDates.contains(dateStr);
+      final status = statusByDate[dateStr];
       final isToday = day == end;
 
-      if (isCompleted) {
+      if (status == CheckInStatus.skipped) {
+        // A deliberate skip is streak-neutral, same as a non-scheduled day.
+        days.add(HabitDayStatus(date: day, status: DayStatus.skipped));
+      } else if (status == CheckInStatus.completed) {
         streak += 1;
         if (streak > longest) longest = streak;
         days.add(
@@ -148,7 +154,7 @@ class StreakCalculator {
   static StreakResult _computeXPerWeek({
     required XPerWeekConfig config,
     required DateTime createdAtLocal,
-    required Set<String> completedDates,
+    required Map<String, CheckInStatus> statusByDate,
     required DateTime today,
   }) {
     final end = DateTime(today.year, today.month, today.day);
@@ -158,7 +164,7 @@ class StreakCalculator {
       createdAtLocal.day,
     );
     final start = _weekStart(
-      _earliestRelevantDate(createdDateOnly, completedDates),
+      _earliestRelevantDate(createdDateOnly, statusByDate.keys),
       config.weekStartsOnMonday,
     );
 
@@ -181,12 +187,17 @@ class StreakCalculator {
         day = day.add(const Duration(days: 1))
       ) {
         final dateStr = localDateString(day);
-        final completed = completedDates.contains(dateStr);
+        final status = statusByDate[dateStr];
+        final completed = status == CheckInStatus.completed;
         if (completed) count += 1;
         days.add(
           HabitDayStatus(
             date: day,
-            status: completed ? DayStatus.completed : DayStatus.notApplicable,
+            status: completed
+                ? DayStatus.completed
+                : status == CheckInStatus.skipped
+                ? DayStatus.skipped
+                : DayStatus.notApplicable,
           ),
         );
       }
@@ -217,10 +228,10 @@ class StreakCalculator {
   /// instead of the check-in existing in storage with nowhere to show.
   static DateTime _earliestRelevantDate(
     DateTime createdDateOnly,
-    Set<String> completedDates,
+    Iterable<String> loggedDates,
   ) {
     var earliest = createdDateOnly;
-    for (final dateStr in completedDates) {
+    for (final dateStr in loggedDates) {
       final date = DateTime.parse(dateStr);
       if (date.isBefore(earliest)) earliest = date;
     }

@@ -11,8 +11,13 @@ import '../../../core/widgets/shimmer_loading.dart';
 import '../../habits/application/habit_providers.dart';
 import '../../habits/domain/habit.dart';
 import '../../habits/domain/streak_calculator.dart';
+import '../../habits/presentation/habit_detail_screen.dart';
+import '../../habits/presentation/widgets/year_heatmap.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
+import '../../data_export/data_export_providers.dart';
+import '../domain/consistency_score.dart';
+import '../domain/leveling.dart';
 
 // ─── Time filter ──────────────────────────────────────────────────────────────
 
@@ -91,6 +96,31 @@ class OverallAnalyticsScreen extends ConsumerWidget {
             letterSpacing: -0.3,
           ),
         ),
+        actions: [
+          if (isPro)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: () => ref.read(dataExporterProvider).shareCsv(),
+                icon: Icon(Icons.ios_share_rounded, size: 16, color: textMuted),
+                // A bare icon here gave no hint this exports *everything*
+                // (same full history Settings' "Export my data" does, not
+                // just this screen's current view/filter) — spelling that
+                // out beats a tooltip nobody long-presses to find.
+                label: Text(
+                  'Export all',
+                  style: TextStyle(
+                    color: textMuted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: border),
@@ -586,18 +616,53 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
       (s, r) => math.max(s, r.longestStreak),
     );
 
-    // Live per-habit streak from `results` (already watched above via
-    // streakDetailProvider) rather than habit.currentStreak, which only
-    // refreshes on a real structural list change now that
-    // activeHabitsProvider suppresses check-in-only re-emissions.
-    final totalXP =
-        widget.habits.fold<int>(
-          0,
-          (s, h) => s + (results[h.id]?.currentStreak ?? h.currentStreak),
-        ) *
-        10;
+    // Leveling — always computed from the FULL history (r.days, not
+    // _filteredDays(r)), independent of the selected time filter, since a
+    // lifetime level shouldn't reset just because the user switched to a
+    // 7-day view.
+    final lifetimeCompletedCheckIns = results.values
+        .expand((r) => r.days)
+        .where((d) => d.status == DayStatus.completed)
+        .length;
+    final longestStreakPerHabit = widget.habits
+        .map((h) => results[h.id]?.longestStreak ?? h.longestStreak)
+        .toList();
+    final levelInfo = Leveling.compute(
+      Leveling.totalXp(
+        totalCompletedCheckIns: lifetimeCompletedCheckIns,
+        longestStreakPerHabit: longestStreakPerHabit,
+      ),
+    );
 
-    final consistencyScore = (avgRate * 100).round().clamp(0, 100);
+    // Smoothed consistency score — pools every habit's relevant days by
+    // date within the selected window, turns each date into a completion
+    // fraction, then exponentially weights recent dates more heavily than
+    // older ones (see ConsistencyScore's doc comment). Distinct from
+    // avgRate above, which stays a flat ratio for the literal "Avg Rate"
+    // stat and the per-habit breakdown percentages — this smoothed number
+    // is only for the headline consistency card and its insight text.
+    final pooledByDate = <String, ({int completed, int missed})>{};
+    for (final r in results.values) {
+      for (final d in _filteredDays(r)) {
+        if (d.status != DayStatus.completed && d.status != DayStatus.missed) {
+          continue;
+        }
+        final key = localDateString(d.date);
+        final cur = pooledByDate[key] ?? (completed: 0, missed: 0);
+        pooledByDate[key] = d.status == DayStatus.completed
+            ? (completed: cur.completed + 1, missed: cur.missed)
+            : (completed: cur.completed, missed: cur.missed + 1);
+      }
+    }
+    final sortedDates = pooledByDate.keys.toList()..sort();
+    final dailyRates = sortedDates.map((k) {
+      final v = pooledByDate[k]!;
+      final total = v.completed + v.missed;
+      return total == 0 ? 0.0 : v.completed / total;
+    }).toList();
+    final consistencyScore = (ConsistencyScore.compute(dailyRates) * 100)
+        .round()
+        .clamp(0, 100);
 
     // Chart data for selected window
     final chartDays = _filter.days ?? 30;
@@ -635,6 +700,70 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
       (i) => dowTotals[i] == 0 ? 0.0 : dowCounts[i] / dowTotals[i],
     );
 
+    // ── Mood & Consistency correlation ────────────────────────────────
+    // Independent of the selected time filter — a correlation is more
+    // meaningful over as much history as exists, same reasoning as the
+    // leveling XP above. All habits' day-status entries for a given date
+    // are pooled to get that day's overall completion rate, then averaged
+    // per mood-score bucket (1-5).
+    final moodEntries = ref.watch(moodEntriesProvider).valueOrNull ?? const [];
+    final dayStatusByDate = <String, List<HabitDayStatus>>{};
+    for (final r in results.values) {
+      for (final d in r.days) {
+        dayStatusByDate.putIfAbsent(localDateString(d.date), () => []).add(d);
+      }
+    }
+    final rateSumsByMood = <int, double>{};
+    final rateCountsByMood = <int, int>{};
+    for (final entry in moodEntries) {
+      final dayStatuses = dayStatusByDate[entry.date];
+      if (dayStatuses == null) continue;
+      final relevant = dayStatuses
+          .where(
+            (d) =>
+                d.status == DayStatus.completed || d.status == DayStatus.missed,
+          )
+          .toList();
+      if (relevant.isEmpty) continue;
+      final rate =
+          relevant.where((d) => d.status == DayStatus.completed).length /
+          relevant.length;
+      rateSumsByMood.update(
+        entry.moodScore,
+        (v) => v + rate,
+        ifAbsent: () => rate,
+      );
+      rateCountsByMood.update(entry.moodScore, (v) => v + 1, ifAbsent: () => 1);
+    }
+    // ── This Year heatmap ──────────────────────────────────────────────
+    // Full lifetime history, pooled across every habit — the fraction of
+    // that day's scheduled habits that got completed. Independent of the
+    // selected time filter for the same reason leveling is: a year view
+    // shouldn't collapse to 7 days just because that's the active tab.
+    final yearTallyByDate = <String, ({int completed, int total})>{};
+    for (final r in results.values) {
+      for (final d in r.days) {
+        if (d.status != DayStatus.completed && d.status != DayStatus.missed) {
+          continue;
+        }
+        final key = localDateString(d.date);
+        final cur = yearTallyByDate[key] ?? (completed: 0, total: 0);
+        yearTallyByDate[key] = (
+          completed: cur.completed + (d.status == DayStatus.completed ? 1 : 0),
+          total: cur.total + 1,
+        );
+      }
+    }
+    final yearIntensityByDate = <String, double>{
+      for (final e in yearTallyByDate.entries)
+        e.key: e.value.completed / e.value.total,
+    };
+
+    final moodByScore = <int, double>{
+      for (final e in rateSumsByMood.entries)
+        e.key: e.value / rateCountsByMood[e.key]!,
+    };
+
     final insight = _buildInsight(
       consistencyScore: consistencyScore,
       rateTrend: rateTrend,
@@ -655,7 +784,10 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
           border: border,
         ).animate().fadeIn(duration: 200.ms),
 
-        const SizedBox(height: 16),
+        // 20, matching the gap every later section (Activity, Best Days,
+        // This Year, ...) uses below — this one was a leftover 16, the
+        // only place the rhythm broke stepping down the screen.
+        const SizedBox(height: 20),
 
         // ── Consistency score card ────────────────────────────────────────
         _ConsistencyCard(
@@ -673,7 +805,7 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
 
         // ── 4-stat mini grid ──────────────────────────────────────────────
         _StatGrid(
-              totalXP: totalXP,
+              levelInfo: levelInfo,
               totalCheckIns: totalCheckIns,
               longestEver: longestEver,
               avgRate: avgRate,
@@ -685,6 +817,20 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
               isDark: widget.isDark,
             )
             .animate(delay: 40.ms)
+            .fadeIn(duration: 300.ms)
+            .slideY(begin: 0.06, end: 0),
+
+        const SizedBox(height: 12),
+
+        _LevelCard(
+              levelInfo: levelInfo,
+              accent: widget.accent,
+              textPrimary: widget.textPrimary,
+              textMuted: widget.textMuted,
+              surface: widget.surface,
+              border: border,
+            )
+            .animate(delay: 60.ms)
             .fadeIn(duration: 300.ms)
             .slideY(begin: 0.06, end: 0),
 
@@ -740,6 +886,58 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
             .slideY(begin: 0.06, end: 0),
 
         const SizedBox(height: 20),
+
+        // ── This year ────────────────────────────────────────────────────
+        _SectionHeader(
+          'This Year',
+          subtitle: 'Every habit, pooled',
+          accent: widget.accent,
+          textMuted: widget.textMuted,
+        ),
+        const SizedBox(height: 10),
+        _ChartCard(
+              isDark: widget.isDark,
+              surface: widget.surface,
+              child: YearHeatmap(
+                intensityByDate: yearIntensityByDate,
+                accent: widget.accent,
+                emptyColor: widget.isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.05),
+                textPrimary: widget.textPrimary,
+                textMuted: widget.textMuted,
+              ),
+            )
+            .animate(delay: 130.ms)
+            .fadeIn(duration: 300.ms)
+            .slideY(begin: 0.06, end: 0),
+
+        const SizedBox(height: 20),
+
+        // ── Mood & Consistency correlation ──────────────────────────────
+        if (moodByScore.isNotEmpty) ...[
+          _SectionHeader(
+            'Mood & Consistency',
+            subtitle: 'Completion rate by how you felt that day',
+            accent: widget.accent,
+            textMuted: widget.textMuted,
+          ),
+          const SizedBox(height: 10),
+          _ChartCard(
+                isDark: widget.isDark,
+                surface: widget.surface,
+                child: _MoodCorrelation(
+                  ratesByMood: moodByScore,
+                  accent: widget.accent,
+                  textMuted: widget.textMuted,
+                  textPrimary: widget.textPrimary,
+                ),
+              )
+              .animate(delay: 140.ms)
+              .fadeIn(duration: 300.ms)
+              .slideY(begin: 0.06, end: 0),
+          const SizedBox(height: 20),
+        ],
 
         // ── Per-habit breakdown with sparklines ───────────────────────────
         _SectionHeader(
@@ -1109,7 +1307,7 @@ class _RingPainter extends CustomPainter {
 
 class _StatGrid extends StatelessWidget {
   const _StatGrid({
-    required this.totalXP,
+    required this.levelInfo,
     required this.totalCheckIns,
     required this.longestEver,
     required this.avgRate,
@@ -1121,7 +1319,7 @@ class _StatGrid extends StatelessWidget {
     required this.isDark,
   });
 
-  final int totalXP;
+  final LevelInfo levelInfo;
   final int totalCheckIns;
   final int longestEver;
   final double avgRate;
@@ -1169,79 +1367,103 @@ class _StatGrid extends StatelessWidget {
               )
             : null,
       ),
-      _StatItem(icon: '✨', label: 'XP Earned', value: '$totalXP', sub: null),
+      _StatItem(
+        icon: '🎖️',
+        label: 'Level ${levelInfo.level}',
+        value: levelInfo.title,
+        sub: null,
+      ),
     ];
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.0,
-      children: stats.map((s) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: border, width: 1),
-          ),
-          child: Row(
-            children: [
-              Text(s.icon, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      s.label,
-                      style: TextStyle(
-                        color: textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
+    // A plain Column of Rows, not GridView.count — GridView forces every
+    // tile to the *same* fixed height derived from childAspectRatio
+    // regardless of how tall its content actually is, and since none of
+    // these boxes had an inner Align/Center, that forced extra height
+    // just sat as dead space at the bottom of each box, reading as an
+    // oversized gap below the whole grid. A Row of Expanded boxes sizes
+    // each one to its own content instead.
+    Widget statBox(_StatItem s) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border, width: 1),
+        ),
+        child: Row(
+          children: [
+            Text(s.icon, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    s.label,
+                    style: TextStyle(
+                      color: textMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        s.value,
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                        ),
+                      ),
+                      if (s.sub != null) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          (s.sub! as _TrendSub).icon,
+                          size: 11,
+                          color: (s.sub! as _TrendSub).color,
+                        ),
                         Text(
-                          s.value,
+                          (s.sub! as _TrendSub).label,
                           style: TextStyle(
-                            color: textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            height: 1,
+                            color: (s.sub! as _TrendSub).color,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        if (s.sub != null) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            (s.sub! as _TrendSub).icon,
-                            size: 11,
-                            color: (s.sub! as _TrendSub).color,
-                          ),
-                          Text(
-                            (s.sub! as _TrendSub).label,
-                            style: TextStyle(
-                              color: (s.sub! as _TrendSub).color,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      }).toList(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: statBox(stats[0])),
+            const SizedBox(width: 8),
+            Expanded(child: statBox(stats[1])),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(child: statBox(stats[2])),
+            const SizedBox(width: 8),
+            Expanded(child: statBox(stats[3])),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1268,6 +1490,120 @@ class _TrendSub {
   final IconData icon;
   final Color color;
   final String label;
+}
+
+// ── Level card ──────────────────────────────────────────────────────────────
+//
+// Replaces the old "XP Earned" number with something that actually goes
+// somewhere — a title, a level, and a progress bar toward the next one.
+
+/// "1,590" — same thousands-separator treatment Home's level chip uses.
+String _formatXp(int n) {
+  final digits = n.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
+class _LevelCard extends StatelessWidget {
+  const _LevelCard({
+    required this.levelInfo,
+    required this.accent,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.surface,
+    required this.border,
+  });
+
+  final LevelInfo levelInfo;
+  final Color accent;
+  final Color textPrimary;
+  final Color textMuted;
+  final Color surface;
+  final Color border;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent.withValues(alpha: 0.14),
+              border: Border.all(color: accent.withValues(alpha: 0.4)),
+            ),
+            child: Center(
+              child: Text(
+                '${levelInfo.level}',
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      levelInfo.title,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Same lifetime figure Home's level chip shows — shown
+                    // here too, explicitly labeled "lifetime", so it's
+                    // clear this and the per-level line below it aren't
+                    // two different XP counts, just two different slices
+                    // of the same one.
+                    Text(
+                      '${_formatXp(levelInfo.totalXp)} XP lifetime',
+                      style: TextStyle(color: textMuted, fontSize: 10.5),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: levelInfo.progress,
+                    minHeight: 6,
+                    backgroundColor: border,
+                    color: accent,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatXp(levelInfo.xpIntoLevel)} / ${_formatXp(levelInfo.xpForThisLevel)} XP to level ${levelInfo.level + 1}',
+                  style: TextStyle(color: textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Section header ────────────────────────────────────────────────────────────
@@ -1568,6 +1904,77 @@ class _DowHeatmap extends StatelessWidget {
   }
 }
 
+// ── Mood & Consistency correlation ────────────────────────────────────────────
+
+class _MoodCorrelation extends StatelessWidget {
+  const _MoodCorrelation({
+    required this.ratesByMood,
+    required this.accent,
+    required this.textMuted,
+    required this.textPrimary,
+  });
+
+  /// Mood score (1-5) → average same-day completion rate. Missing keys
+  /// mean no logged day at that mood level yet.
+  final Map<int, double> ratesByMood;
+  final Color accent;
+  final Color textMuted;
+  final Color textPrimary;
+
+  static const _labels = ['😞', '🙁', '😐', '🙂', '😄'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(5, (i) {
+        final score = i + 1;
+        final rate = ratesByMood[score];
+        return Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                rate == null ? '—' : '${(rate * 100).round()}%',
+                style: TextStyle(
+                  color: rate == null
+                      ? textMuted.withValues(alpha: 0.4)
+                      : textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 56,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.bottomCenter,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: accent.withValues(alpha: 0.08),
+                ),
+                child: FractionallySizedBox(
+                  heightFactor: rate ?? 0.02,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: rate == null
+                          ? textMuted.withValues(alpha: 0.15)
+                          : accent,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(_labels[i], style: const TextStyle(fontSize: 14)),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
 // ── Per-habit breakdown with sparklines ───────────────────────────────────────
 
 class _HabitBreakdown extends StatelessWidget {
@@ -1619,77 +2026,87 @@ class _HabitBreakdown extends StatelessWidget {
 
         return Padding(
           padding: EdgeInsets.only(bottom: i < habits.length - 1 ? 14 : 0),
-          child: Row(
-            children: [
-              // Color dot
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: habitColor,
-                  shape: BoxShape.circle,
-                ),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => HabitDetailScreen(habit: habit),
               ),
-              const SizedBox(width: 10),
-              // Name
-              Expanded(
-                child: Text(
-                  habit.name,
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+            ),
+            child: Row(
+              children: [
+                // Color dot
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: habitColor,
+                    shape: BoxShape.circle,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 8),
-              // 7-day sparkline dots
-              Row(
-                children: spark.map((status) {
-                  Color dotColor;
-                  switch (status) {
-                    case DayStatus.completed:
-                      dotColor = habitColor;
-                      break;
-                    case DayStatus.missed:
-                      dotColor = AppColors.danger.withValues(alpha: 0.5);
-                      break;
-                    default:
-                      dotColor = textMuted.withValues(alpha: 0.2);
-                  }
-                  return Container(
-                    width: 7,
-                    height: 7,
-                    margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                    decoration: BoxDecoration(
-                      color: dotColor,
-                      shape: BoxShape.circle,
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(width: 10),
-              // Rate badge
-              Container(
-                width: 40,
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                decoration: BoxDecoration(
-                  color: habitColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Center(
+                const SizedBox(width: 10),
+                // Name
+                Expanded(
                   child: Text(
-                    '$pct%',
+                    habit.name,
                     style: TextStyle(
-                      color: habitColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 7-day sparkline dots
+                Row(
+                  children: spark.map((status) {
+                    Color dotColor;
+                    switch (status) {
+                      case DayStatus.completed:
+                        dotColor = habitColor;
+                        break;
+                      case DayStatus.missed:
+                        dotColor = AppColors.danger.withValues(alpha: 0.5);
+                        break;
+                      default:
+                        dotColor = textMuted.withValues(alpha: 0.2);
+                    }
+                    return Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(width: 10),
+                // Rate badge
+                Container(
+                  width: 40,
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  decoration: BoxDecoration(
+                    color: habitColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$pct%',
+                      style: TextStyle(
+                        color: habitColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, size: 16, color: textMuted),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -1753,75 +2170,89 @@ class _StreakLeaderboard extends StatelessWidget {
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => HabitDetailScreen(habit: habit),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    // Medal or rank
-                    SizedBox(
-                      width: 24,
-                      child: Text(
-                        i < 3 ? medals[i] : '${i + 1}',
-                        style: TextStyle(
-                          fontSize: i < 3 ? 16 : 12,
-                          color: textMuted,
-                          fontWeight: FontWeight.w700,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      // Medal or rank
+                      SizedBox(
+                        width: 24,
+                        child: Text(
+                          i < 3 ? medals[i] : '${i + 1}',
+                          style: TextStyle(
+                            fontSize: i < 3 ? 16 : 12,
+                            color: textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Color dot
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: habitColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Name
-                    Expanded(
-                      child: Text(
-                        habit.name,
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(width: 10),
+                      // Color dot
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: habitColor,
+                          shape: BoxShape.circle,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    // Current streak
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('🔥', style: const TextStyle(fontSize: 12)),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${current}d',
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                      const SizedBox(width: 8),
+                      // Name
+                      Expanded(
+                        child: Text(
+                          habit.name,
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Current streak
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('🔥', style: const TextStyle(fontSize: 12)),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${current}d',
+                                style: TextStyle(
+                                  color: textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          'best ${best}d',
-                          style: TextStyle(color: textMuted, fontSize: 9),
-                        ),
-                      ],
-                    ),
-                  ],
+                            ],
+                          ),
+                          Text(
+                            'best ${best}d',
+                            style: TextStyle(color: textMuted, fontSize: 9),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: textMuted,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (!isLast)

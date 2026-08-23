@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/prefs/shared_preferences_provider.dart';
@@ -131,6 +136,43 @@ class _MilestoneOverlayState extends State<_MilestoneOverlay>
   late final Animation<double> _countAnim;
   int _displayCount = 0;
   Timer? _countTimer;
+  final GlobalKey _shareKey = GlobalKey();
+  bool _isSharing = false;
+
+  /// Captures the [RepaintBoundary]-wrapped card below (emoji through the
+  /// motivational message — not the dismiss button) as a PNG and hands it
+  /// to the OS share sheet, mirroring the exact temp-file + share_plus
+  /// pattern `DataExporter.shareCsv()` already uses.
+  Future<void> _shareAsImage() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final boundary =
+          _shareKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) return;
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/zstreak_milestone_${widget.habit.id}_${widget.streak}.png',
+      );
+      await file.writeAsBytes(bytes.buffer.asUint8List());
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text:
+              '${widget.streak}-day streak on ${widget.habit.name} ${widget.habit.emoji} — built with ZStreak',
+        ),
+      );
+    } catch (_) {
+      // No user-visible surface for a share failure here — the OS share
+      // sheet itself communicates success; silently no-op on failure.
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
 
   @override
   void initState() {
@@ -195,101 +237,151 @@ class _MilestoneOverlayState extends State<_MilestoneOverlay>
             children: [
               const Spacer(flex: 2),
 
-              // ── Habit emoji ──────────────────────────────────────────────
-              Text(widget.habit.emoji, style: const TextStyle(fontSize: 48))
-                  .animate()
-                  .fadeIn(delay: 100.ms, duration: 400.ms)
-                  .scale(
-                    begin: const Offset(0.6, 0.6),
-                    end: const Offset(1.0, 1.0),
-                    duration: 500.ms,
-                    curve: Curves.easeOutBack,
+              // Wrapped in a RepaintBoundary so a tap on the share button
+              // below can capture exactly this card (not the dismiss
+              // button or the surrounding Spacers) as a shareable PNG.
+              RepaintBoundary(
+                key: _shareKey,
+                child: Container(
+                  color: tintedBg,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // ── Habit emoji ──────────────────────────────────────
+                      Text(
+                            widget.habit.emoji,
+                            style: const TextStyle(fontSize: 48),
+                          )
+                          .animate()
+                          .fadeIn(delay: 100.ms, duration: 400.ms)
+                          .scale(
+                            begin: const Offset(0.6, 0.6),
+                            end: const Offset(1.0, 1.0),
+                            duration: 500.ms,
+                            curve: Curves.easeOutBack,
+                          ),
+
+                      const SizedBox(height: 24),
+
+                      // ── Count-up number ───────────────────────────────────
+                      Text(
+                        '$_displayCount',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 96,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -4,
+                          height: 1,
+                        ),
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      // ── "day streak" label ────────────────────────────────
+                      Text(
+                        'day streak',
+                        style: TextStyle(
+                          color: textMuted,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.3,
+                        ),
+                      ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+
+                      const SizedBox(height: 32),
+
+                      // ── Milestone emoji badge ─────────────────────────────
+                      Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: accentColor.withValues(
+                                alpha: isDark ? 0.15 : 0.10,
+                              ),
+                              border: Border.all(
+                                color: accentColor.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  emoji,
+                                  style: const TextStyle(fontSize: 22),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  widget.habit.name,
+                                  style: TextStyle(
+                                    color: textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .animate()
+                          .fadeIn(delay: 400.ms, duration: 400.ms)
+                          .slideY(
+                            begin: 0.15,
+                            end: 0,
+                            delay: 400.ms,
+                            duration: 400.ms,
+                            curve: Curves.easeOut,
+                          ),
+
+                      const SizedBox(height: 28),
+
+                      // ── Motivational message ──────────────────────────────
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: textMuted,
+                          fontSize: 16,
+                          height: 1.5,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
+                    ],
                   ),
-
-              const SizedBox(height: 24),
-
-              // ── Count-up number ──────────────────────────────────────────
-              Text(
-                '$_displayCount',
-                style: TextStyle(
-                  color: accentColor,
-                  fontSize: 96,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -4,
-                  height: 1,
                 ),
               ),
 
-              const SizedBox(height: 4),
+              const SizedBox(height: 20),
 
-              // ── "day streak" label ───────────────────────────────────────
-              Text(
-                'day streak',
-                style: TextStyle(
-                  color: textMuted,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.3,
-                ),
-              ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-
-              const SizedBox(height: 32),
-
-              // ── Milestone emoji badge ────────────────────────────────────
-              Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: accentColor.withValues(
-                        alpha: isDark ? 0.15 : 0.10,
-                      ),
-                      border: Border.all(
-                        color: accentColor.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(emoji, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(width: 10),
-                        Text(
-                          widget.habit.name,
-                          style: TextStyle(
-                            color: textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
+              // ── Share button ──────────────────────────────────────────────
+              TextButton.icon(
+                onPressed: _isSharing ? null : _shareAsImage,
+                icon: _isSharing
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: accentColor,
                         ),
-                      ],
-                    ),
-                  )
-                  .animate()
-                  .fadeIn(delay: 400.ms, duration: 400.ms)
-                  .slideY(
-                    begin: 0.15,
-                    end: 0,
-                    delay: 400.ms,
-                    duration: 400.ms,
-                    curve: Curves.easeOut,
+                      )
+                    : Icon(
+                        Icons.ios_share_rounded,
+                        size: 16,
+                        color: accentColor,
+                      ),
+                label: Text(
+                  'Share this streak',
+                  style: TextStyle(
+                    color: accentColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
-
-              const SizedBox(height: 28),
-
-              // ── Motivational message ─────────────────────────────────────
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: textMuted,
-                  fontSize: 16,
-                  height: 1.5,
-                  fontWeight: FontWeight.w400,
                 ),
-              ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
+              ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
 
               const Spacer(flex: 2),
 

@@ -111,30 +111,67 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 onPressed: () => Navigator.of(context).pop(),
               )
             : null,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: isDark ? AppColors.border : AppColors.borderLight,
+      ),
+      // The Google button + fine print live here, pinned to the bottom of
+      // the screen, rather than inside the scrollable body — previously
+      // everything sat in one Center+Column, so on any screen taller than
+      // the content, the whole block (headline and button together)
+      // floated in the middle with large, purposeless gaps above and
+      // below it. Anchoring the primary action to the bottom is the
+      // standard shape for a sign-in screen and reads as "designed" even
+      // when the body content above is short.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          decoration: BoxDecoration(
+            color: bgColor,
+            border: Border(
+              top: BorderSide(
+                color: isDark ? AppColors.border : AppColors.borderLight,
+              ),
+            ),
           ),
+          child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _GoogleButton(
+                    isBusy: _isBusy,
+                    onPressed: () => _signInWithGoogle(repo),
+                    surfaceColor: surfaceColor,
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'By continuing, you agree to our Terms and Privacy Policy.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textMuted,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              )
+              .animate()
+              .fadeIn(delay: 280.ms, duration: 350.ms)
+              .slideY(begin: 0.1, end: 0),
         ),
       ),
       body: SafeArea(
         top: false,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-            child: _GoogleOnlyView(
-              profile: profile,
-              accent: accent,
-              surfaceColor: surfaceColor,
-              borderColor: borderColor,
-              textPrimary: textPrimary,
-              textMuted: textMuted,
-              isDark: isDark,
-              isBusy: _isBusy,
-              onGoogle: () => _signInWithGoogle(repo),
-            ),
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: _GoogleOnlyView(
+            profile: profile,
+            accent: accent,
+            surfaceColor: surfaceColor,
+            borderColor: borderColor,
+            textPrimary: textPrimary,
+            textMuted: textMuted,
+            isDark: isDark,
           ),
         ),
       ),
@@ -153,8 +190,6 @@ class _GoogleOnlyView extends StatelessWidget {
     required this.textPrimary,
     required this.textMuted,
     required this.isDark,
-    required this.isBusy,
-    required this.onGoogle,
   });
 
   final dynamic profile;
@@ -164,8 +199,6 @@ class _GoogleOnlyView extends StatelessWidget {
   final Color textPrimary;
   final Color textMuted;
   final bool isDark;
-  final bool isBusy;
-  final VoidCallback onGoogle;
 
   @override
   Widget build(BuildContext context) {
@@ -183,16 +216,88 @@ class _GoogleOnlyView extends StatelessWidget {
           textMuted: textMuted,
         ).animate().fadeIn(duration: 500.ms).slideY(begin: -0.1),
 
-        const SizedBox(height: 36),
+        const SizedBox(height: 40),
 
-        // ── Google button ─────────────────────────────────────────────────
-        _GoogleButton(
-          isBusy: isBusy,
-          onPressed: onGoogle,
+        // ── What signing in gets you — fills the space the old
+        // centered layout left blank, and gives the bottom-pinned
+        // button somewhere to point back to. ────────────────────────
+        _BenefitRow(
+          emoji: '🔥',
+          text: 'Streaks that carry over to every device',
+          accent: accent,
           surfaceColor: surfaceColor,
           borderColor: borderColor,
           textPrimary: textPrimary,
-        ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
+        ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.05),
+        const SizedBox(height: 14),
+        _BenefitRow(
+          emoji: '📊',
+          text: 'A full history of your consistency, never lost',
+          accent: accent,
+          surfaceColor: surfaceColor,
+          borderColor: borderColor,
+          textPrimary: textPrimary,
+        ).animate().fadeIn(delay: 160.ms).slideX(begin: -0.05),
+        const SizedBox(height: 14),
+        _BenefitRow(
+          emoji: '☁️',
+          text: 'Backed up automatically — nothing to lose',
+          accent: accent,
+          surfaceColor: surfaceColor,
+          borderColor: borderColor,
+          textPrimary: textPrimary,
+        ).animate().fadeIn(delay: 220.ms).slideX(begin: -0.05),
+      ],
+    );
+  }
+}
+
+// ─── Benefit row ──────────────────────────────────────────────────────────────
+
+class _BenefitRow extends StatelessWidget {
+  const _BenefitRow({
+    required this.emoji,
+    required this.text,
+    required this.accent,
+    required this.surfaceColor,
+    required this.borderColor,
+    required this.textPrimary,
+  });
+
+  final String emoji;
+  final String text;
+  final Color accent;
+  final Color surfaceColor;
+  final Color borderColor;
+  final Color textPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: accent.withValues(alpha: 0.10),
+            border: Border.all(color: accent.withValues(alpha: 0.20), width: 1),
+          ),
+          child: Text(emoji, style: const TextStyle(fontSize: 17)),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: textPrimary,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+        ),
       ],
     );
   }

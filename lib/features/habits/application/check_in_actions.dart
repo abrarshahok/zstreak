@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../analytics/analytics_service.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../reviews/review_prompt_service.dart';
+import '../domain/check_in_status.dart';
 import '../domain/habit.dart';
 import '../presentation/milestone_overlay.dart';
 import 'habit_providers.dart';
@@ -48,12 +49,20 @@ Future<void> performCheckIn({
 
     if (isDone) {
       HapticFeedback.lightImpact();
-      await repo.setCheckIn(habitId: habit.id, date: date, completed: false);
+      await repo.setCheckIn(
+        habitId: habit.id,
+        date: date,
+        status: CheckInStatus.missed,
+      );
       return;
     }
 
     HapticFeedback.mediumImpact();
-    await repo.setCheckIn(habitId: habit.id, date: date, completed: true);
+    await repo.setCheckIn(
+      habitId: habit.id,
+      date: date,
+      status: CheckInStatus.completed,
+    );
 
     final updated = await repo.getHabitById(habit.id);
     if (updated == null) return;

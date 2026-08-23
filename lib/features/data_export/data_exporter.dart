@@ -27,7 +27,7 @@ class DataExporter {
     final habits = [...active, ...archived];
     final habitNames = {for (final h in habits) h.id: h.name};
 
-    final buffer = StringBuffer('habit_name,date,completed,note\n');
+    final buffer = StringBuffer('habit_name,date,status,value,note\n');
     for (final habit in habits) {
       final checkIns = await _repo.watchHabitCheckIns(habit.id).first;
       final sorted = checkIns.toList()
@@ -35,7 +35,9 @@ class DataExporter {
       for (final c in sorted) {
         final name = _escapeCsv(habitNames[c.habitId] ?? 'unknown');
         final note = _escapeCsv(c.note ?? '');
-        buffer.writeln('$name,${c.date},${c.completed},$note');
+        buffer.writeln(
+          '$name,${c.date},${c.status.toDbValue()},${c.value ?? ''},$note',
+        );
       }
     }
     return buffer.toString();

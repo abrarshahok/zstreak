@@ -25,6 +25,17 @@ class Habits extends Table {
   /// Feature 6 – Drag-to-reorder: lower values appear first in the list.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
+  /// Either a predefined category id or a row id in [Categories]. Null =
+  /// uncategorized.
+  TextColumn get categoryId => text().nullable()();
+
+  /// Non-null together: makes this a quantity habit rather than yes/no.
+  IntColumn get targetCount => integer().nullable()();
+  TextColumn get targetUnit => text().nullable()();
+
+  /// A habit being quit rather than built — copy/framing only.
+  BoolColumn get isQuitHabit => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -37,7 +48,17 @@ class CheckIns extends Table {
   /// Local calendar date "YYYY-MM-DD" — the check-in's identity, not a
   /// UTC timestamp (spec Section 2).
   TextColumn get date => text()();
+
+  /// Kept in sync with [status] for backward compatibility with any code
+  /// still reading the raw boolean column — every write sets both.
   BoolColumn get completed => boolean().withDefault(const Constant(true))();
+
+  /// 'completed' | 'missed' | 'skipped' — see `CheckInStatus`.
+  TextColumn get status =>
+      text().withDefault(const Constant('completed'))();
+
+  /// Logged quantity for a quantity habit. Null otherwise.
+  IntColumn get value => integer().nullable()();
   TextColumn get note => text().nullable()();
   DateTimeColumn get loggedAt => dateTime()();
 
@@ -49,6 +70,40 @@ class CheckIns extends Table {
   @override
   List<Set<Column>> get uniqueKeys => [
     {habitId, date},
+  ];
+}
+
+/// User-created habit categories. Predefined ones ([kPredefinedCategories])
+/// are a static in-memory list and never stored here.
+@DataClassName('CategoryRow')
+class Categories extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get emoji => text()();
+  TextColumn get colorHex => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One whole-day mood/energy log per date — not tied to any habit.
+@DataClassName('MoodEntryRow')
+class MoodEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get date => text()();
+  IntColumn get moodScore => integer()();
+  IntColumn get energyScore => integer().nullable()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get loggedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {date},
   ];
 }
 

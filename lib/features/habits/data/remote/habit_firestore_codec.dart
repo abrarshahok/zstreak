@@ -23,6 +23,10 @@ class HabitFirestoreCodec {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) {
     return {
       'name': name,
@@ -32,6 +36,10 @@ class HabitFirestoreCodec {
       'frequencyConfig': frequencyConfig.toJson(),
       'reminderTime': reminderTime,
       'description': description,
+      'categoryId': categoryId,
+      'targetCount': targetCount,
+      'targetUnit': targetUnit,
+      'isQuitHabit': isQuitHabit,
     };
   }
 
@@ -45,6 +53,10 @@ class HabitFirestoreCodec {
     String? reminderTime,
     String? description,
     required DateTime createdAt,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) {
     return {
       ..._sharedFields(
@@ -55,6 +67,10 @@ class HabitFirestoreCodec {
         frequencyConfig: frequencyConfig,
         reminderTime: reminderTime,
         description: description,
+        categoryId: categoryId,
+        targetCount: targetCount,
+        targetUnit: targetUnit,
+        isQuitHabit: isQuitHabit,
       ),
       'currentStreak': 0,
       'longestStreak': 0,
@@ -81,6 +97,10 @@ class HabitFirestoreCodec {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) {
     return {
       ..._sharedFields(
@@ -91,6 +111,10 @@ class HabitFirestoreCodec {
         frequencyConfig: frequencyConfig,
         reminderTime: reminderTime,
         description: description,
+        categoryId: categoryId,
+        targetCount: targetCount,
+        targetUnit: targetUnit,
+        isQuitHabit: isQuitHabit,
       ),
       'updatedAt': Timestamp.now(),
     };
@@ -112,6 +136,10 @@ class HabitFirestoreCodec {
     required DateTime createdAt,
     required DateTime? archivedAt,
     required int sortOrder,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) {
     return {
       ..._sharedFields(
@@ -122,6 +150,10 @@ class HabitFirestoreCodec {
         frequencyConfig: frequencyConfig,
         reminderTime: reminderTime,
         description: description,
+        categoryId: categoryId,
+        targetCount: targetCount,
+        targetUnit: targetUnit,
+        isQuitHabit: isQuitHabit,
       ),
       'currentStreak': currentStreak,
       'longestStreak': longestStreak,
@@ -157,6 +189,10 @@ class HabitFirestoreCodec {
       archivedAt: (data['archivedAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
       sortOrder: data['sortOrder'] as int? ?? 0,
+      categoryId: data['categoryId'] as String?,
+      targetCount: data['targetCount'] as int?,
+      targetUnit: data['targetUnit'] as String?,
+      isQuitHabit: data['isQuitHabit'] as bool? ?? false,
     );
   }
 }

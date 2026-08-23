@@ -153,10 +153,24 @@ class EditCounterButton extends StatelessWidget {
   }
 }
 
-// ─── Save FAB ─────────────────────────────────────────────────────────────────
-
-class EditSaveFab extends StatelessWidget {
-  const EditSaveFab({
+// ─── Save Button ──────────────────────────────────────────────────────────────
+//
+// Docked to the bottom of the screen via `Scaffold.bottomNavigationBar`
+// (same anchoring as the sign-in screen's Google button) rather than a
+// floating action button — a centered FAB over scrolling content read as
+// an afterthought bolted on top of the form, not the form's own primary
+// action.
+//
+// Deliberately its own shape rather than matching every other rectangle
+// on the screen: a full pill (radius = half its own height) marks this
+// specific control as *the* primary action, and a press-scale animation
+// gives it the tactile, "physical" feel a screen's one confirming tap
+// deserves — flat color fields elsewhere on this screen don't need that,
+// but the button you commit the whole form with does. A leading icon
+// (check for editing, plus for creating) reinforces what the tap does
+// without leaning on the button's label text alone.
+class EditSaveButton extends StatefulWidget {
+  const EditSaveButton({
     super.key,
     required this.isEditing,
     required this.isSaving,
@@ -169,36 +183,71 @@ class EditSaveFab extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<EditSaveButton> createState() => _EditSaveButtonState();
+}
+
+class _EditSaveButtonState extends State<EditSaveButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: isSaving ? null : onPressed,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accentColor,
-            foregroundColor: contrastForeground(accentColor),
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            textStyle: GoogleFonts.outfit(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-            ),
+    final fg = contrastForeground(widget.accentColor);
+    final disabled = widget.isSaving;
+
+    return GestureDetector(
+      onTapDown: disabled ? null : (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      onTap: disabled ? null : widget.onPressed,
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 54,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(27),
+            color: disabled
+                ? widget.accentColor.withValues(alpha: 0.6)
+                : widget.accentColor,
           ),
-          child: isSaving
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
+          child: Center(
+            child: widget.isSaving
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: fg,
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.isEditing
+                            ? Icons.check_rounded
+                            : Icons.add_rounded,
+                        color: fg,
+                        size: 19,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.isEditing ? 'Save changes' : 'Create habit',
+                        style: GoogleFonts.outfit(
+                          color: fg,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
-                )
-              : Text(isEditing ? 'Save changes' : 'Create habit ✨'),
+          ),
         ),
       ),
     );

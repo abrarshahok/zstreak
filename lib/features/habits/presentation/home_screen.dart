@@ -11,6 +11,7 @@ import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/widgets/shimmer_loading.dart';
+import '../../analytics/domain/leveling.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
@@ -20,12 +21,13 @@ import '../application/check_in_actions.dart';
 import '../application/habit_providers.dart';
 import '../domain/frequency.dart';
 import '../domain/habit.dart';
+import '../domain/habit_category.dart';
 import '../domain/streak_calculator.dart';
-import '../domain/habit_template.dart';
 import 'archived_habits_screen.dart';
 import 'edit_habit_screen.dart';
 import 'habit_detail_screen.dart';
 import 'habit_tile.dart';
+import 'mood_card.dart';
 import 'weekly_review_card.dart';
 
 // ─── View mode provider ───────────────────────────────────────────────────────
@@ -40,6 +42,13 @@ final _homeFocusModeProvider = StateProvider<_FocusMode>((_) => _FocusMode.all);
 
 enum _FocusMode { all, today }
 
+// ─── Category filter provider ─────────────────────────────────────────────────
+//
+// null = "All" (no filter). Cleared implicitly on nothing — a user leaving
+// Home mid-filter and coming back keeps seeing the filtered view, which
+// matches how the view/focus mode providers above already behave.
+final _homeCategoryFilterProvider = StateProvider<String?>((_) => null);
+
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
 class HomeScreen extends ConsumerWidget {
@@ -52,6 +61,8 @@ class HomeScreen extends ConsumerWidget {
     final habits = ref.watch(activeHabitsProvider);
     final viewMode = ref.watch(_homeViewModeProvider);
     final focusMode = ref.watch(_homeFocusModeProvider);
+    final categoryFilter = ref.watch(_homeCategoryFilterProvider);
+    final categories = ref.watch(categoriesProvider).valueOrNull ?? const [];
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppColors.background : AppColors.backgroundLight;
 
@@ -90,8 +101,63 @@ class HomeScreen extends ConsumerWidget {
                   SliverToBoxAdapter(child: _HabitsLoadError(isDark: isDark)),
               data: (list) {
                 if (list.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: _EmptyStateWithTemplates(isDark: isDark),
+                  return SliverToBoxAdapter(child: _EmptyState(isDark: isDark));
+                }
+
+                // Only categories with at least one habit are worth
+                // offering as a filter — an empty category chip would just
+                // be a dead end.
+                final usedCategoryIds = list
+                    .map((h) => h.categoryId)
+                    .whereType<String>()
+                    .toSet();
+                final filterableCategories = categories
+                    .where((c) => usedCategoryIds.contains(c.id))
+                    .toList();
+                final categoryFiltered = categoryFilter == null
+                    ? list
+                    : list
+                          .where((h) => h.categoryId == categoryFilter)
+                          .toList();
+
+                final categoryChips = filterableCategories.isEmpty
+                    ? null
+                    : SliverToBoxAdapter(
+                        child: _CategoryFilterRow(
+                          categories: filterableCategories,
+                          selectedId: categoryFilter,
+                          isDark: isDark,
+                          onSelected: (id) =>
+                              ref
+                                  .read(_homeCategoryFilterProvider.notifier)
+                                  .state = (categoryFilter == id
+                              ? null
+                              : id),
+                        ),
+                      );
+
+                if (categoryFiltered.isEmpty) {
+                  return SliverMainAxisGroup(
+                    slivers: [
+                      if (categoryChips != null) categoryChips,
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 40,
+                          ),
+                          child: Text(
+                            'No habits in this category.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.textMuted
+                                  : AppColors.textMutedLight,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 }
 
@@ -100,33 +166,42 @@ class HomeScreen extends ConsumerWidget {
                 // used to receive the full unfiltered `list` here, which
                 // meant a free user hit their habit limit in "All" but saw
                 // every habit, paywall gate and all, the moment they
-                // switched to "Today". Same gate, both views now.
-                final visibleList = (!isPro && list.length > limit)
-                    ? list.sublist(0, limit)
-                    : list;
-                final lockedCount = (!isPro && list.length > limit)
-                    ? list.length - limit
+                // switched to "Today". Same gate, both views now. Applied
+                // after the category filter, so the limit reflects what's
+                // actually being shown.
+                final visibleList = (!isPro && categoryFiltered.length > limit)
+                    ? categoryFiltered.sublist(0, limit)
+                    : categoryFiltered;
+                final lockedCount = (!isPro && categoryFiltered.length > limit)
+                    ? categoryFiltered.length - limit
                     : 0;
 
                 // ── Today Focus mode ─────────────────────────────────────
                 if (focusMode == _FocusMode.today) {
-                  return _TodayFocusSliver(
-                    habits: visibleList,
-                    isDark: isDark,
-                    lockedCount: lockedCount,
+                  return SliverMainAxisGroup(
+                    slivers: [
+                      if (categoryChips != null) categoryChips,
+                      SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
+                      _TodayFocusSliver(
+                        habits: visibleList,
+                        isDark: isDark,
+                        lockedCount: lockedCount,
+                      ),
+                    ],
                   );
                 }
 
                 // ── All mode ─────────────────────────────────────────────
                 return SliverMainAxisGroup(
                   slivers: [
+                    if (categoryChips != null) categoryChips,
+                    SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
                     SliverToBoxAdapter(
                       child: _StreakSummaryBar(
                         habits: visibleList,
                         isDark: isDark,
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
                     SliverToBoxAdapter(
                       child: WeeklyReviewCard(habits: visibleList),
                     ),
@@ -854,6 +929,11 @@ class HabitGridCard extends ConsumerWidget {
         streakDetail.valueOrNull?.currentStreak ?? habit.currentStreak;
     final isOnFire = currentStreak >= 7;
     final isScheduledToday = habit.isScheduledOnWeekday(DateTime.now().weekday);
+    final category = habit.categoryId == null
+        ? null
+        : (ref.watch(categoriesProvider).valueOrNull ?? const [])
+              .cast<HabitCategory?>()
+              .firstWhere((c) => c!.id == habit.categoryId, orElse: () => null);
 
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
     final border = isDark ? AppColors.border : AppColors.borderLight;
@@ -918,6 +998,25 @@ class HabitGridCard extends ConsumerWidget {
                                     end: const Offset(1.1, 1.1),
                                     duration: 900.ms,
                                   ),
+                        ),
+                      if (category != null)
+                        Positioned(
+                          bottom: -2,
+                          right: -2,
+                          child: Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colorFromHex(category.colorHex),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.background
+                                    : AppColors.backgroundLight,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1158,6 +1257,7 @@ class _MiniGridPainter extends CustomPainter {
           case DayStatus.missed:
             color = missedColor;
           case DayStatus.notApplicable:
+          case DayStatus.skipped:
           case DayStatus.future:
             color = futureColor;
         }
@@ -1383,6 +1483,21 @@ class _HomeAppBar extends ConsumerWidget {
                           tooltip: viewMode == _ViewMode.list
                               ? 'Switch to grid view'
                               : 'Switch to list view',
+                        ),
+                        // The only other way in was tapping the level/today
+                        // ring cards further down with no visual hint that
+                        // they were tappable at all — a persistent, always
+                        // visible entry point in the app bar shouldn't
+                        // depend on someone discovering that by accident.
+                        _IconBtn(
+                          icon: Icons.bar_chart_rounded,
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const OverallAnalyticsScreen(),
+                            ),
+                          ),
+                          isDark: isDark,
+                          tooltip: 'Analytics',
                         ),
                         _IconBtn(
                           icon: Icons.archive_outlined,
@@ -1624,16 +1739,32 @@ class _StreakSummaryBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Live per-habit streak, same reasoning as HabitTile/HabitGridCard —
-    // habit.currentStreak only refreshes on a real structural list
-    // change now that activeHabitsProvider suppresses check-in-only
+    // Live per-habit streak result, same reasoning as HabitTile/HabitGridCard
+    // — habit.currentStreak/longestStreak only refresh on a real structural
+    // list change now that activeHabitsProvider suppresses check-in-only
     // re-emissions, so this bar (which aggregates across every habit)
-    // needs its own live source instead of relying on that field.
-    int liveStreak(Habit h) =>
-        ref.watch(streakDetailProvider(h)).valueOrNull?.currentStreak ??
-        h.currentStreak;
+    // needs its own live source instead of relying on those fields.
+    final results = <String, StreakResult>{};
+    for (final h in habits) {
+      final r = ref.watch(streakDetailProvider(h)).valueOrNull;
+      if (r != null) results[h.id] = r;
+    }
+    // Same Leveling module Analytics' level card uses — this is the one
+    // level number in the app, not a second disconnected "XP" figure.
+    final totalCompletedCheckIns = results.values
+        .expand((r) => r.days)
+        .where((d) => d.status == DayStatus.completed)
+        .length;
+    final longestStreakPerHabit = habits
+        .map((h) => results[h.id]?.longestStreak ?? h.longestStreak)
+        .toList();
+    final levelInfo = Leveling.compute(
+      Leveling.totalXp(
+        totalCompletedCheckIns: totalCompletedCheckIns,
+        longestStreakPerHabit: longestStreakPerHabit,
+      ),
+    );
 
-    final totalStreaks = habits.fold<int>(0, (sum, h) => sum + liveStreak(h));
     // Not liveStreak(h) > 0 — a habit with an existing streak still reads
     // as > 0 on a day it hasn't been checked in yet (a missed check-in
     // only zeroes the streak the *next* time it's recomputed, not
@@ -1659,52 +1790,64 @@ class _StreakSummaryBar extends ConsumerWidget {
         : AppColors.textPrimaryLight;
     final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
 
+    final todayRatio = total == 0 ? 0.0 : doneToday / total;
+
+    // Two distinct cards — lifetime level, today's progress — each with
+    // its own ring, instead of the two ideas crammed onto one text line
+    // with the previous design. A ring communicates "progress toward
+    // something" at a glance the way a bare number never does, and it's
+    // the same visual language Analytics' own consistency ring already
+    // uses, so Home now reads as a preview of that screen rather than
+    // an unrelated stat line.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      // Bottom-only margin, no top — MoodCard right above already owns
+      // the gap between itself and this bar. Every section in this stack
+      // follows that same one rule (own your bottom margin only) so the
+      // rhythm down the screen stays one consistent number instead of
+      // two adjacent cards each adding their own half of the gap and
+      // silently doubling it.
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: GestureDetector(
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const OverallAnalyticsScreen()),
         ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: surface,
-            border: Border.all(color: border, width: 1),
-          ),
-          child: Row(
-            children: [
-              _Chip(
-                label: 'XP',
-                value: '${totalStreaks * 10}',
+        child: Row(
+          children: [
+            Expanded(
+              child: _RingStatCard(
+                ringValue: levelInfo.progress,
+                ringLabel: '${levelInfo.level}',
+                ringColor: accent,
+                title: 'Level ${levelInfo.level}',
+                // Just the title, not the lifetime XP count too — that
+                // number plus "Blaze" plus "lifetime" doesn't fit this
+                // compact a card at any font size worth reading, which is
+                // exactly what the mid-word "X…" truncation was. The full
+                // breakdown (level progress AND the lifetime total) has
+                // proper room on the Analytics screen this card taps
+                // through to.
+                subtitle: levelInfo.title,
+                surface: surface,
+                border: border,
                 textPrimary: textPrimary,
                 textMuted: textMuted,
               ),
-              Container(
-                width: 1,
-                height: 28,
-                color: border,
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-              _Chip(
-                label: 'Today',
-                value: '$doneToday/$total',
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _RingStatCard(
+                ringValue: todayRatio,
+                ringLabel: '${(todayRatio * 100).round()}%',
+                ringColor: accent,
+                title: '$doneToday/$total today',
+                subtitle: _label(doneToday, total),
+                surface: surface,
+                border: border,
                 textPrimary: textPrimary,
                 textMuted: textMuted,
               ),
-              const Spacer(),
-              Text(
-                _label(doneToday, total),
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 2),
-              Icon(Icons.chevron_right_rounded, color: textMuted, size: 16),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     ).animate().fadeIn(delay: 50.ms);
@@ -1718,42 +1861,279 @@ class _StreakSummaryBar extends ConsumerWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.label,
-    required this.value,
+class _RingStatCard extends StatelessWidget {
+  const _RingStatCard({
+    required this.ringValue,
+    required this.ringLabel,
+    required this.ringColor,
+    required this.title,
+    required this.subtitle,
+    required this.surface,
+    required this.border,
     required this.textPrimary,
     required this.textMuted,
   });
 
-  final String label;
-  final String value;
+  /// 0..1 fill fraction of the ring.
+  final double ringValue;
+
+  /// Short text centered inside the ring (a level number, or a percent).
+  final String ringLabel;
+  final Color ringColor;
+  final String title;
+  final String subtitle;
+  final Color surface;
+  final Color border;
   final Color textPrimary;
   final Color textMuted;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: textPrimary,
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: surface,
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 38,
+            height: 38,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: ringValue.clamp(0, 1),
+                    strokeWidth: 3.5,
+                    backgroundColor: border,
+                    color: ringColor,
+                  ),
+                ),
+                Text(
+                  ringLabel,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        Text(label, style: TextStyle(color: textMuted, fontSize: 10)),
-      ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: textMuted, fontSize: 10.5),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 2),
+          // Same trailing-chevron convention Analytics' own breakdown and
+          // leaderboard rows use for "this leads somewhere" — nothing on
+          // this card said that otherwise, and a whole tappable card with
+          // zero visual hint is exactly how that goes unnoticed.
+          Icon(Icons.chevron_right_rounded, size: 16, color: textMuted),
+        ],
+      ),
     );
   }
 }
 
 // ─── Empty State with Templates ───────────────────────────────────────────────
 
-class _EmptyStateWithTemplates extends StatelessWidget {
-  const _EmptyStateWithTemplates({required this.isDark});
+// ─── Category filter row ───────────────────────────────────────────────────────
+
+class _CategoryFilterRow extends StatelessWidget {
+  const _CategoryFilterRow({
+    required this.categories,
+    required this.selectedId,
+    required this.isDark,
+    required this.onSelected,
+  });
+
+  final List<HabitCategory> categories;
+  final String? selectedId;
+  final bool isDark;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final border = isDark ? AppColors.border : AppColors.borderLight;
+    final surfaceElevated = isDark
+        ? AppColors.surfaceElevated
+        : AppColors.surfaceElevatedLight;
+
+    return Padding(
+      // Top breathing room: this is the very first thing under the app
+      // bar in "All" categories view — with no gap of its own it sat
+      // flush against it, same mistake a cramped header always makes.
+      padding: const EdgeInsets.fromLTRB(0, 14, 0, 12),
+      child: SizedBox(
+        height: 34,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          // No standalone "All" chip — Home's own All/Today toggle sits
+          // right above this row, and a second chip also reading "All"
+          // directly under it read as a visual duplicate, not a filter.
+          // Tapping the active category again already clears it; a
+          // small "×" chip appears at the end only while a filter is on,
+          // so clearing has an explicit target without repeating that
+          // word a second time on the same screen.
+          itemCount: categories.length + (selectedId != null ? 1 : 0),
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, i) {
+            final hasClear = selectedId != null;
+            if (hasClear && i == 0) {
+              return GestureDetector(
+                onTap: () => onSelected(null),
+                child: Container(
+                  width: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: surfaceElevated,
+                    border: Border.all(color: border),
+                  ),
+                  child: Icon(Icons.close_rounded, size: 16, color: textMuted),
+                ),
+              );
+            }
+
+            final category = categories[hasClear ? i - 1 : i];
+            final selected = selectedId == category.id;
+            final accent = colorFromHex(category.colorHex);
+            // Every chip carries a faint permanent tint of its own
+            // category color, not just when selected — otherwise every
+            // unselected chip looked identically grey and the row gave
+            // no sense that these were different, colorful categories
+            // until you tapped one.
+            return GestureDetector(
+              onTap: () => onSelected(category.id),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(17),
+                  color: accent.withValues(alpha: selected ? 0.20 : 0.09),
+                  border: Border.all(
+                    color: accent.withValues(alpha: selected ? 1 : 0.3),
+                    width: selected ? 1.5 : 1,
+                  ),
+                ),
+                child: Text(
+                  '${category.emoji} ${category.name}',
+                  style: TextStyle(
+                    color: selected ? textPrimary : textMuted,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ).animate().fadeIn(delay: 40.ms);
+  }
+}
+
+/// A minimal, standalone quick-start card shown on the empty-Home state —
+/// deliberately just these 3, not a browsable template library (that
+/// feature was removed; only these 3 quick-start cards were asked back).
+class _QuickStart {
+  const _QuickStart({
+    required this.emoji,
+    required this.name,
+    required this.colorHex,
+    required this.frequencyType,
+    this.frequencyConfig = const DailyConfig(),
+    this.description,
+  });
+
+  final String emoji;
+  final String name;
+  final String colorHex;
+  final FrequencyType frequencyType;
+  final FrequencyConfig frequencyConfig;
+  final String? description;
+
+  String get frequencyLabel {
+    switch (frequencyType) {
+      case FrequencyType.daily:
+        return 'Every day';
+      case FrequencyType.weekdays:
+        final days = (frequencyConfig as WeekdaysConfig).weekdays;
+        if (days.length == 5 &&
+            days.contains(1) &&
+            days.contains(5) &&
+            !days.contains(6)) {
+          return 'Weekdays';
+        }
+        const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return days.map((d) => names[d - 1]).join(', ');
+      case FrequencyType.xPerWeek:
+        final n = (frequencyConfig as XPerWeekConfig).timesPerWeek;
+        return '$n× per week';
+    }
+  }
+}
+
+const _kQuickStarts = [
+  _QuickStart(
+    emoji: '🧘',
+    name: 'Meditate 10 min',
+    colorHex: '#B57BFF',
+    frequencyType: FrequencyType.daily,
+    description:
+        'Sit quietly for 10 minutes — focus on breath, body scan, or guided session.',
+  ),
+  _QuickStart(
+    emoji: '📚',
+    name: 'Read 20 pages',
+    colorHex: '#B57BFF',
+    frequencyType: FrequencyType.daily,
+    description:
+        'Read at least 20 pages of a non-fiction or fiction book every day.',
+  ),
+  _QuickStart(
+    emoji: '🏃',
+    name: 'Morning run',
+    colorHex: '#FF4D4D',
+    frequencyType: FrequencyType.weekdays,
+    frequencyConfig: WeekdaysConfig(weekdays: [1, 2, 3, 4, 5]),
+    description:
+        'Run at least 3 km before work — pace doesn\'t matter, showing up does.',
+  ),
+];
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.isDark});
 
   final bool isDark;
 
@@ -1786,18 +2166,17 @@ class _EmptyStateWithTemplates extends StatelessWidget {
           ).animate().fadeIn(delay: 80.ms),
           const SizedBox(height: 6),
           Text(
-            'Start from a template or create your own.',
+            'Start from a quick pick or create your own.',
             textAlign: TextAlign.center,
             style: TextStyle(color: textMuted, fontSize: 14, height: 1.5),
           ).animate().fadeIn(delay: 120.ms),
 
           const SizedBox(height: 28),
 
-          // ── Featured templates label ──────────────────────────────────────
           Row(
             children: [
               Text(
-                'Featured templates',
+                'Quick start',
                 style: TextStyle(
                   color: textMuted,
                   fontSize: 11,
@@ -1810,18 +2189,25 @@ class _EmptyStateWithTemplates extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          // ── 3 featured template cards ─────────────────────────────────────
-          ...kFeaturedTemplates.asMap().entries.map((entry) {
+          ..._kQuickStarts.asMap().entries.map((entry) {
             final index = entry.key;
-            final template = entry.value;
-            final accentColor = colorFromHex(template.colorHex);
+            final quickStart = entry.value;
+            final accentColor = colorFromHex(quickStart.colorHex);
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child:
                   GestureDetector(
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => EditHabitScreen(template: template),
+                            builder: (_) => EditHabitScreen(
+                              prefillEmoji: quickStart.emoji,
+                              prefillColorHex: quickStart.colorHex,
+                              prefillFrequencyType: quickStart.frequencyType,
+                              prefillFrequencyConfig:
+                                  quickStart.frequencyConfig,
+                              prefillName: quickStart.name,
+                              prefillDescription: quickStart.description,
+                            ),
                           ),
                         ),
                         child: Container(
@@ -1836,7 +2222,6 @@ class _EmptyStateWithTemplates extends StatelessWidget {
                           ),
                           child: Row(
                             children: [
-                              // Emoji badge
                               Container(
                                 width: 40,
                                 height: 40,
@@ -1852,19 +2237,18 @@ class _EmptyStateWithTemplates extends StatelessWidget {
                                 ),
                                 child: Center(
                                   child: Text(
-                                    template.emoji,
+                                    quickStart.emoji,
                                     style: const TextStyle(fontSize: 20),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Name + frequency
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      template.name,
+                                      quickStart.name,
                                       style: TextStyle(
                                         color: textPrimary,
                                         fontWeight: FontWeight.w600,
@@ -1873,7 +2257,7 @@ class _EmptyStateWithTemplates extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      _frequencyLabel(template),
+                                      quickStart.frequencyLabel,
                                       style: TextStyle(
                                         color: textMuted,
                                         fontSize: 12,
@@ -1882,7 +2266,6 @@ class _EmptyStateWithTemplates extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              // Arrow
                               Icon(
                                 Icons.arrow_forward_ios_rounded,
                                 size: 13,
@@ -1904,7 +2287,6 @@ class _EmptyStateWithTemplates extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // ── Create from scratch button ─────────────────────────────────────
           GestureDetector(
             onTap: () => Navigator.of(
               context,
@@ -1932,32 +2314,12 @@ class _EmptyStateWithTemplates extends StatelessWidget {
                 ],
               ),
             ),
-          ).animate().fadeIn(delay: 480.ms).slideY(begin: 0.06),
+          ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.06),
 
           const SizedBox(height: 32),
         ],
       ),
     );
-  }
-
-  String _frequencyLabel(HabitTemplate template) {
-    switch (template.frequencyType) {
-      case FrequencyType.daily:
-        return 'Daily';
-      case FrequencyType.weekdays:
-        final days = template.weekdays ?? [1, 2, 3, 4, 5];
-        if (days.length == 5 &&
-            days.contains(1) &&
-            days.contains(5) &&
-            !days.contains(6)) {
-          return 'Weekdays';
-        }
-        const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        return days.map((d) => names[d - 1]).join(', ');
-      case FrequencyType.xPerWeek:
-        final n = template.timesPerWeek ?? 3;
-        return '$n× per week';
-    }
   }
 }
 

@@ -9,10 +9,15 @@ import '../../widgets/application/widget_providers.dart';
 import '../../widgets/data/widget_syncing_habit_repository.dart';
 import '../data/local/app_database.dart';
 import '../data/local/drift_habit_repository.dart';
+import '../data/local/drift_mood_repository.dart';
 import '../data/remote/firestore_habit_repository.dart';
+import '../data/remote/firestore_mood_repository.dart';
 import '../domain/check_in.dart';
 import '../domain/habit.dart';
+import '../domain/habit_category.dart';
 import '../domain/habit_repository.dart';
+import '../domain/mood_entry.dart';
+import '../domain/mood_repository.dart';
 import '../domain/streak_calculator.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -36,6 +41,27 @@ final habitRepositoryProvider = Provider<HabitRepository>((ref) {
     ref.watch(widgetSyncServiceProvider),
     () => ref.read(hasActiveEntitlementProvider.future),
   );
+});
+
+/// Same Drift-for-guests/Firestore-for-signed-in split as
+/// [habitRepositoryProvider], for the mood/energy log — a sibling backend,
+/// not routed through the habit widget-sync decorator since mood entries
+/// never touch the home-screen widget.
+final moodRepositoryProvider = Provider<MoodRepository>((ref) {
+  final user = ref.watch(authStateProvider).valueOrNull;
+  return (user != null && !user.isAnonymous)
+      ? FirestoreMoodRepository(ref.watch(firestoreProvider), user.uid)
+      : DriftMoodRepository(ref.watch(appDatabaseProvider));
+});
+
+/// Predefined categories are always available; custom ones are appended
+/// after them so a user's own categories still read as "their own,"
+/// listed after the built-in set.
+final categoriesProvider = StreamProvider<List<HabitCategory>>((ref) {
+  return ref
+      .watch(habitRepositoryProvider)
+      .watchCategories()
+      .map((custom) => [...kPredefinedCategories, ...custom]);
 });
 
 /// [watchActiveHabits] re-emits its whole result whenever *any* matching
@@ -86,6 +112,10 @@ String _structuralFingerprint(Habit h) => [
   h.sortOrder,
   h.archivedAt?.toIso8601String(),
   h.updatedAt.toIso8601String(),
+  h.categoryId,
+  h.targetCount,
+  h.targetUnit,
+  h.isQuitHabit,
 ].join('|');
 
 final archivedHabitsProvider = StreamProvider<List<Habit>>((ref) {
@@ -136,4 +166,18 @@ final habitCheckInsProvider = StreamProvider.family<List<CheckIn>, String>((
   habitId,
 ) {
   return ref.watch(habitRepositoryProvider).watchHabitCheckIns(habitId);
+});
+
+/// Full mood-entry history, for the Analytics "Mood & Consistency" section.
+final moodEntriesProvider = StreamProvider<List<MoodEntry>>((ref) {
+  return ref.watch(moodRepositoryProvider).watchMoodEntries();
+});
+
+/// A single day's mood entry — used by Home's "How are you feeling today?"
+/// card to know whether today's already been logged.
+final moodEntryProvider = StreamProvider.family<MoodEntry?, String>((
+  ref,
+  date,
+) {
+  return ref.watch(moodRepositoryProvider).watchMoodEntry(date);
 });

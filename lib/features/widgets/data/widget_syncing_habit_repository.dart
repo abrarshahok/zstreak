@@ -1,6 +1,8 @@
 import '../../habits/domain/check_in.dart';
+import '../../habits/domain/check_in_status.dart';
 import '../../habits/domain/frequency.dart';
 import '../../habits/domain/habit.dart';
+import '../../habits/domain/habit_category.dart';
 import '../../habits/domain/habit_repository.dart';
 import '../../habits/domain/streak_calculator.dart';
 import 'widget_sync_service.dart';
@@ -71,6 +73,10 @@ class WidgetSyncingHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) async {
     final habit = await _inner.createHabit(
       name: name,
@@ -80,6 +86,10 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       frequencyConfig: frequencyConfig,
       reminderTime: reminderTime,
       description: description,
+      categoryId: categoryId,
+      targetCount: targetCount,
+      targetUnit: targetUnit,
+      isQuitHabit: isQuitHabit,
     );
     await _syncHabit(habit.id);
     return habit;
@@ -89,14 +99,16 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   Future<void> setCheckIn({
     required String habitId,
     required String date,
-    required bool completed,
+    required CheckInStatus status,
     String? note,
+    int? value,
   }) async {
     await _inner.setCheckIn(
       habitId: habitId,
       date: date,
-      completed: completed,
+      status: status,
       note: note,
+      value: value,
     );
     await _syncHabit(habitId);
   }
@@ -121,6 +133,13 @@ class WidgetSyncingHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool isQuitHabit = false,
   }) async {
     await _inner.updateHabit(
       id: id,
@@ -131,6 +150,13 @@ class WidgetSyncingHabitRepository implements HabitRepository {
       frequencyConfig: frequencyConfig,
       reminderTime: reminderTime,
       description: description,
+      categoryId: categoryId,
+      clearCategoryId: clearCategoryId,
+      targetCount: targetCount,
+      clearTargetCount: clearTargetCount,
+      targetUnit: targetUnit,
+      clearTargetUnit: clearTargetUnit,
+      isQuitHabit: isQuitHabit,
     );
     await _syncHabit(id);
   }
@@ -160,6 +186,34 @@ class WidgetSyncingHabitRepository implements HabitRepository {
     // single widget instance displays (each instance shows one configured
     // habit's own name/emoji/color/streak/completedToday).
   }
+
+  // Categories never affect a widget instance's display, so these are
+  // plain passthroughs with no sync step.
+  @override
+  Stream<List<HabitCategory>> watchCategories() => _inner.watchCategories();
+
+  @override
+  Future<HabitCategory> createCategory({
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => _inner.createCategory(name: name, emoji: emoji, colorHex: colorHex);
+
+  @override
+  Future<void> updateCategory({
+    required String id,
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => _inner.updateCategory(
+    id: id,
+    name: name,
+    emoji: emoji,
+    colorHex: colorHex,
+  );
+
+  @override
+  Future<void> deleteCategory(String id) => _inner.deleteCategory(id);
 
   /// Syncs exactly the one habit that changed — O(1) in total habit count,
   /// unlike re-fetching and rewriting every active habit on every mutation.

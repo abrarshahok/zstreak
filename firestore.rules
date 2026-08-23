@@ -74,11 +74,37 @@ service cloud.firestore {
             || (data.description is string && data.description.size() <= 1000))
         && data.currentStreak is int && data.currentStreak >= 0 && data.currentStreak <= 100000
         && data.longestStreak is int && data.longestStreak >= 0 && data.longestStreak <= 100000
-        && data.sortOrder is int;
+        && data.sortOrder is int
+        && (data.get('categoryId', null) == null
+            || (data.categoryId is string && data.categoryId.size() <= 64))
+        && (data.get('targetCount', null) == null
+            || (data.targetCount is int && data.targetCount >= 0 && data.targetCount <= 1000000))
+        && (data.get('targetUnit', null) == null
+            || (data.targetUnit is string && data.targetUnit.size() <= 32))
+        && (data.get('isQuitHabit', null) == null || data.isQuitHabit is bool);
     }
 
     function isValidCheckInWrite(data) {
       return data.completed is bool
+        && (data.get('status', null) == null
+            || (data.status is string
+                && data.status in ['completed', 'missed', 'skipped']))
+        && (data.get('value', null) == null
+            || (data.value is int && data.value >= 0 && data.value <= 1000000))
+        && (data.get('note', null) == null
+            || (data.note is string && data.note.size() <= 1000));
+    }
+
+    function isValidCategoryWrite(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 60
+        && data.emoji is string && data.emoji.size() <= 32
+        && data.colorHex is string && data.colorHex.size() <= 16;
+    }
+
+    function isValidMoodWrite(data) {
+      return data.moodScore is int && data.moodScore >= 1 && data.moodScore <= 5
+        && (data.get('energyScore', null) == null
+            || (data.energyScore is int && data.energyScore >= 1 && data.energyScore <= 5))
         && (data.get('note', null) == null
             || (data.note is string && data.note.size() <= 1000));
     }
@@ -113,6 +139,18 @@ service cloud.firestore {
           allow create, update: if isOwner(uid) && isActive(uid)
             && isValidCheckInWrite(request.resource.data);
         }
+      }
+
+      match /categories/{categoryId} {
+        allow read, delete: if isOwner(uid) && isActive(uid);
+        allow create, update: if isOwner(uid) && isActive(uid)
+          && isValidCategoryWrite(request.resource.data);
+      }
+
+      match /mood_entries/{date} {
+        allow read, delete: if isOwner(uid) && isActive(uid);
+        allow create, update: if isOwner(uid) && isActive(uid)
+          && isValidMoodWrite(request.resource.data);
       }
     }
   }

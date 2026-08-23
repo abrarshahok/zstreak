@@ -1,6 +1,8 @@
 import 'check_in.dart';
+import 'check_in_status.dart';
 import 'frequency.dart';
 import 'habit.dart';
+import 'habit_category.dart';
 import 'streak_calculator.dart';
 
 /// Storage-agnostic contract implemented by both backends (spec Section 5):
@@ -26,6 +28,10 @@ abstract class HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   });
 
   Stream<CheckIn?> watchCheckIn({
@@ -34,11 +40,13 @@ abstract class HabitRepository {
   });
 
   /// [note] is optional free-text attached to the check-in (Feature 2).
+  /// [value] is the logged quantity for a quantity habit.
   Future<void> setCheckIn({
     required String habitId,
     required String date,
-    required bool completed,
+    required CheckInStatus status,
     String? note,
+    int? value,
   });
 
   /// Atomically flips a check-in's completed state — reads the current
@@ -54,6 +62,9 @@ abstract class HabitRepository {
   /// the same result (a "lost toggle"). Returning the streak too lets
   /// that same caller skip a separate [getHabitById] round-trip just to
   /// read the one field a check-in actually changes.
+  ///
+  /// Only ever flips between `completed`/`missed` — a `skipped` day is
+  /// only reachable via [setCheckIn], from the day-action sheet.
   Future<({bool completed, int currentStreak})> toggleCheckIn({
     required String habitId,
     required String date,
@@ -71,6 +82,13 @@ abstract class HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool isQuitHabit = false,
   });
 
   /// Reversible: hides the habit from Home but keeps its history (Section 3b).
@@ -98,4 +116,25 @@ abstract class HabitRepository {
   /// Feature 6 – Drag-to-reorder: persists new [sortOrder] values for the
   /// given habit ids. [orderedIds] is the full list in display order.
   Future<void> reorderHabits(List<String> orderedIds);
+
+  /// Custom categories only — [kPredefinedCategories] are always available
+  /// and never stored. Sorted by creation order.
+  Stream<List<HabitCategory>> watchCategories();
+
+  Future<HabitCategory> createCategory({
+    required String name,
+    required String emoji,
+    required String colorHex,
+  });
+
+  Future<void> updateCategory({
+    required String id,
+    required String name,
+    required String emoji,
+    required String colorHex,
+  });
+
+  /// Deleting a custom category clears `categoryId` on every habit that
+  /// referenced it rather than leaving a dangling id behind.
+  Future<void> deleteCategory(String id);
 }

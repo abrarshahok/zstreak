@@ -103,19 +103,12 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
     });
   }
 
-  /// Initialize RevenueCat and immediately log in the current Firebase user
-  /// (if one already exists). Without this, the first app launch after a
-  /// cold start never calls [RevenueCatService.logIn] because the
-  /// [authStateProvider] listener below only fires on *changes*, not on the
-  /// already-resolved initial value.
-  Future<void> _initRevenueCat() async {
-    final service = ref.read(revenueCatServiceProvider);
-    await service.initialize();
-    final uid = ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid != null) {
-      await service.logIn(uid);
-    }
-  }
+  /// One-time SDK setup — logging the current Firebase user in (or out)
+  /// afterward is [revenueCatIdentitySyncProvider]'s job now, watched in
+  /// [build] below, which also covers the cold-start case (the
+  /// already-resolved initial uid) that used to need special-casing here.
+  Future<void> _initRevenueCat() =>
+      ref.read(revenueCatServiceProvider).initialize();
 
   Future<void> _openHabit(String habitId) async {
     final habit = await ref.read(habitRepositoryProvider).getHabitById(habitId);
@@ -130,15 +123,22 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Keeps RevenueCat's own identity in sync with the current Firebase
+    // uid — see revenueCatIdentitySyncProvider's doc comment for why this
+    // needs to be its own watched provider rather than a plain side
+    // effect fired from the listener below. Must be watched *somewhere*
+    // for this FutureProvider to actually run and re-run on every auth
+    // change; here, rather than only inside whatever provider first
+    // awaits it, so the resync starts the instant auth state changes.
+    ref.watch(revenueCatIdentitySyncProvider);
+
     // Entitlements follow the Firebase uid (spec Section 2) — including
     // the anonymous guest uid, so a guest's purchase survives a normal
     // link since Stage 6 never changes the uid on that path.
     ref.listen(authStateProvider, (previous, next) {
       final user = next.valueOrNull;
       final uid = user?.uid;
-      final service = ref.read(revenueCatServiceProvider);
       if (uid != null) {
-        service.logIn(uid);
         // Sync user profile from Firestore when a non-anonymous user signs in.
         // This restores name/age/gender/goals on a new device or after reinstall.
         //
@@ -173,8 +173,6 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
                 ref.read(profileHydratingProvider.notifier).state = false;
               });
         }
-      } else {
-        service.logOut();
       }
       ref.read(analyticsServiceProvider).setUserId(uid);
     });

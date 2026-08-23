@@ -8,8 +8,10 @@ import 'package:zstreak/features/analytics/analytics_service.dart';
 import 'package:zstreak/features/habits/application/check_in_actions.dart';
 import 'package:zstreak/features/habits/application/habit_providers.dart';
 import 'package:zstreak/features/habits/domain/check_in.dart';
+import 'package:zstreak/features/habits/domain/check_in_status.dart';
 import 'package:zstreak/features/habits/domain/frequency.dart';
 import 'package:zstreak/features/habits/domain/habit.dart';
+import 'package:zstreak/features/habits/domain/habit_category.dart';
 import 'package:zstreak/features/habits/domain/habit_repository.dart';
 import 'package:zstreak/features/habits/domain/streak_calculator.dart';
 import 'package:zstreak/features/monetization/application/entitlement_providers.dart';
@@ -30,16 +32,18 @@ class RecordingHabitRepository implements HabitRepository {
   RecordingHabitRepository(this._habitAfterCheckIn);
 
   final Habit _habitAfterCheckIn;
-  final List<({String habitId, String date, bool completed})> setCheckInCalls = [];
+  final List<({String habitId, String date, CheckInStatus status})>
+  setCheckInCalls = [];
 
   @override
   Future<void> setCheckIn({
     required String habitId,
     required String date,
-    required bool completed,
+    required CheckInStatus status,
     String? note,
+    int? value,
   }) async {
-    setCheckInCalls.add((habitId: habitId, date: date, completed: completed));
+    setCheckInCalls.add((habitId: habitId, date: date, status: status));
   }
 
   @override
@@ -64,6 +68,10 @@ class RecordingHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    int? targetCount,
+    String? targetUnit,
+    bool isQuitHabit = false,
   }) => throw UnimplementedError();
   @override
   Stream<CheckIn?> watchCheckIn({required String habitId, required String date}) =>
@@ -80,6 +88,13 @@ class RecordingHabitRepository implements HabitRepository {
     required FrequencyConfig frequencyConfig,
     String? reminderTime,
     String? description,
+    String? categoryId,
+    bool clearCategoryId = false,
+    int? targetCount,
+    bool clearTargetCount = false,
+    String? targetUnit,
+    bool clearTargetUnit = false,
+    bool isQuitHabit = false,
   }) => throw UnimplementedError();
   @override
   Future<void> archiveHabit(String id) => throw UnimplementedError();
@@ -96,6 +111,23 @@ class RecordingHabitRepository implements HabitRepository {
   }) => throw UnimplementedError();
   @override
   Future<void> reorderHabits(List<String> orderedIds) => throw UnimplementedError();
+  @override
+  Stream<List<HabitCategory>> watchCategories() => throw UnimplementedError();
+  @override
+  Future<HabitCategory> createCategory({
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => throw UnimplementedError();
+  @override
+  Future<void> updateCategory({
+    required String id,
+    required String name,
+    required String emoji,
+    required String colorHex,
+  }) => throw UnimplementedError();
+  @override
+  Future<void> deleteCategory(String id) => throw UnimplementedError();
 }
 
 Habit _habit({int currentStreak = 8}) {
@@ -175,14 +207,14 @@ void main() {
     );
 
     expect(repo.setCheckInCalls, [
-      (habitId: 'h1', date: '2026-03-10', completed: true),
+      (habitId: 'h1', date: '2026-03-10', status: CheckInStatus.completed),
     ]);
     verify(() => reviewPrompt.maybePromptAfterStreakMilestone(8)).called(1);
     verify(() => analytics.logStreakMilestone(habitId: 'h1', streak: 8)).called(1);
     verify(() => notifications.cancelStreakAtRisk('h1')).called(1);
   });
 
-  testWidgets('unchecking a habit only writes completed:false — no side effects', (tester) async {
+  testWidgets('unchecking a habit only writes status:missed — no side effects', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
@@ -209,7 +241,7 @@ void main() {
     );
 
     expect(repo.setCheckInCalls, [
-      (habitId: 'h1', date: '2026-03-10', completed: false),
+      (habitId: 'h1', date: '2026-03-10', status: CheckInStatus.missed),
     ]);
     verifyNever(() => reviewPrompt.maybePromptAfterStreakMilestone(any()));
     verifyNever(() => analytics.logStreakMilestone(
