@@ -2368,7 +2368,7 @@ class _DetailDowHeatmap extends StatelessWidget {
                           ? textMuted.withValues(alpha: 0.4)
                           : contrastForeground(barColor);
                       return Text(
-                        rate == 0 ? '—' : '$pct%',
+                        rate == 0 ? '-' : '$pct%',
                         style: TextStyle(
                           color: labelColor,
                           fontSize: 8,

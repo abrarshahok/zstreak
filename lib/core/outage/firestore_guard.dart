@@ -59,7 +59,7 @@ class FirestoreGuard {
     if (breaker.isOpen) {
       ref.read(appHealthProvider.notifier).notifyBackendFailure();
       throw const FirestoreGuardException(
-        'Circuit breaker is open — backend unavailable.',
+        'Circuit breaker is open - backend unavailable.',
       );
     }
 

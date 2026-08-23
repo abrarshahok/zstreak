@@ -132,31 +132,32 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ),
             ),
           ),
-          child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _GoogleButton(
-                    isBusy: _isBusy,
-                    onPressed: () => _signInWithGoogle(repo),
-                    surfaceColor: surfaceColor,
-                    borderColor: borderColor,
-                    textPrimary: textPrimary,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'By continuing, you agree to our Terms and Privacy Policy.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: textMuted,
-                      fontSize: 11,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              )
-              .animate()
-              .fadeIn(delay: 280.ms, duration: 350.ms)
-              .slideY(begin: 0.1, end: 0),
+          child:
+              Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _GoogleButton(
+                        isBusy: _isBusy,
+                        onPressed: () => _signInWithGoogle(repo),
+                        surfaceColor: surfaceColor,
+                        borderColor: borderColor,
+                        textPrimary: textPrimary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'By continuing, you agree to our Terms and Privacy Policy.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: textMuted,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  )
+                  .animate()
+                  .fadeIn(delay: 280.ms, duration: 350.ms)
+                  .slideY(begin: 0.1, end: 0),
         ),
       ),
       body: SafeArea(
@@ -241,7 +242,7 @@ class _GoogleOnlyView extends StatelessWidget {
         const SizedBox(height: 14),
         _BenefitRow(
           emoji: '☁️',
-          text: 'Backed up automatically — nothing to lose',
+          text: 'Backed up automatically - nothing to lose',
           accent: accent,
           surfaceColor: surfaceColor,
           borderColor: borderColor,

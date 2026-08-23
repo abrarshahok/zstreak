@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/local_date.dart';
@@ -18,6 +19,11 @@ import '../data/notification_service.dart';
 ///
 /// • **Milestone** — fired immediately when a check-in produces a streak
 ///   that hits 3, 7, 14, 21, 30, 60, 90, 180, or 365 days.
+///
+/// • **Daily reminder** — re-scheduled for every active habit with a
+///   reminder time set, once per app start, so its message rotates through
+///   [NotificationService]'s copy pool daily instead of repeating whatever
+///   text happened to be baked in the last time the habit was edited.
 ///
 /// • **Weekly summary** — scheduled every Sunday at 8 PM with the week's
 ///   completion stats. Refreshed on every app start.
@@ -51,9 +57,40 @@ class NotificationOrchestrator {
       checkInsByHabit[habit.id] = await repo.watchHabitCheckIns(habit.id).first;
     }
 
+    await _refreshDailyReminders(habits);
     await _refreshStreakAtRisk(habits, checkInsByHabit);
     await _refreshWeeklySummary(habits, checkInsByHabit);
     await _refreshProUpsell();
+  }
+
+  // ─── Daily reminder ────────────────────────────────────────────────────────
+
+  /// Re-rolls the reminder message for every active habit that has one
+  /// scheduled, so it varies day to day instead of freezing on whatever
+  /// text was picked the last time the habit was edited. Habits without a
+  /// reminder time are untouched — nothing was ever scheduled for them.
+  Future<void> _refreshDailyReminders(List<Habit> habits) async {
+    for (final habit in habits) {
+      final reminderTime = habit.reminderTime;
+      if (reminderTime == null) continue;
+
+      final parts = reminderTime.split(':');
+      final time = TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
+      );
+
+      await _notifications.scheduleDailyReminder(
+        habitId: habit.id,
+        habitName: habit.name,
+        habitEmoji: habit.emoji,
+        currentStreak: habit.currentStreak,
+        time: time,
+        scheduledWeekdays: habit.frequencyType == FrequencyType.weekdays
+            ? (habit.frequencyConfig as WeekdaysConfig).weekdays
+            : null,
+      );
+    }
   }
 
   // ─── Streak-at-risk ────────────────────────────────────────────────────────

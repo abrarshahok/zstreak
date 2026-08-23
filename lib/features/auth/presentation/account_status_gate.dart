@@ -135,7 +135,7 @@ class AccountStatusGate extends ConsumerWidget {
             ? 'Your reactivation window has passed'
             : 'Your account is restricted',
         body: isExpiredWindow
-            ? "It's been more than 30 days since you deactivated. Your data hasn't been deleted, but this account can no longer be reactivated on your own — contact support if you'd like to discuss recovering it."
+            ? "It's been more than 30 days since you deactivated. Your data hasn't been deleted, but this account can no longer be reactivated on your own - contact support if you'd like to discuss recovering it."
             : 'Your account has been restricted and is temporarily inaccessible. Contact support if you think this is a mistake.',
         primaryLabel: 'Contact support',
         onPrimary: () => launchUrl(Uri.parse('mailto:zstreak26@gmail.com')),
@@ -148,7 +148,7 @@ class AccountStatusGate extends ConsumerWidget {
       icon: '💤',
       title: 'Your account is deactivated',
       body: record.daysUntilDeadline != null
-          ? "Nothing was deleted. Reactivate to pick up right where you left off — you have ${record.daysUntilDeadline} day${record.daysUntilDeadline == 1 ? '' : 's'} left in your reactivation window."
+          ? "Nothing was deleted. Reactivate to pick up right where you left off - you have ${record.daysUntilDeadline} day${record.daysUntilDeadline == 1 ? '' : 's'} left in your reactivation window."
           : 'Nothing was deleted. Reactivate to pick up right where you left off.',
       primaryLabel: 'Reactivate account',
       onPrimary: () => _reactivate(context, ref),

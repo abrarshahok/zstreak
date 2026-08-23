@@ -163,7 +163,7 @@ class _MilestoneOverlayState extends State<_MilestoneOverlay>
         ShareParams(
           files: [XFile(file.path)],
           text:
-              '${widget.streak}-day streak on ${widget.habit.name} ${widget.habit.emoji} — built with ZStreak',
+              '${widget.streak}-day streak on ${widget.habit.name} ${widget.habit.emoji} - built with ZStreak',
         ),
       );
     } catch (_) {

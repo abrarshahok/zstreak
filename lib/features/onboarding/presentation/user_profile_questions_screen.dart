@@ -387,7 +387,7 @@ class _UserProfileQuestionsScreenState
                     question: "What are your goals?",
                     emoji: '🎯',
                     subCopy:
-                        "Pick as many as you like — we'll tailor your experience.",
+                        "Pick as many as you like - we'll tailor your experience.",
                     choices: const [
                       'Build healthy habits',
                       'Stay consistent',
@@ -574,7 +574,7 @@ class _AgeStepState extends State<_AgeStep> {
     return _StepShell(
       emoji: '🎂',
       question: 'How old are you?',
-      subCopy: 'Optional — scroll to pick your age.',
+      subCopy: 'Optional - scroll to pick your age.',
       textPrimary: widget.textPrimary,
       textMuted: widget.textMuted,
       child: _AgeDrumPicker(

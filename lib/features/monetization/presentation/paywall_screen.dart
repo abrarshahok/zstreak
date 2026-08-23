@@ -544,7 +544,7 @@ class _HeroSection extends StatelessWidget {
         const SizedBox(height: 10),
         // Sub-headline
         Text(
-          'Everything you need to build habits that actually stick — unlimited, synced, and always with you.',
+          'Everything you need to build habits that actually stick - unlimited, synced, and always with you.',
           style: TextStyle(color: textMuted, fontSize: 14, height: 1.5),
         ).animate().fadeIn(delay: 100.ms),
       ],

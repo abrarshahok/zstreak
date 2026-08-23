@@ -140,7 +140,7 @@ class _GuestGateSheet extends ConsumerWidget {
                 ),
               ),
               child: const Text(
-                'Sign up — it\'s free',
+                'Sign up - it\'s free',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ),

@@ -123,7 +123,7 @@ class MergeSummaryScreen extends StatelessWidget {
                           Text(
                             "We kept everything, but your free plan covers "
                             '${AppConfig.freeTierHabitLimit} active habits. '
-                            '$archivedCount $habitWord landed archived — reactivate them from '
+                            '$archivedCount $habitWord landed archived - reactivate them from '
                             "that habit's edit screen, or upgrade to activate them all.",
                             style: TextStyle(
                               color: textMuted,

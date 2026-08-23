@@ -620,7 +620,7 @@ class _TodayProgressRing extends StatelessWidget {
                     ? 'Nothing scheduled today'
                     : done == 0
                     ? "Let's get started!"
-                    : '${((progress) * 100).round()}% complete — keep going!',
+                    : '${((progress) * 100).round()}% complete - keep going!',
                 style: TextStyle(
                   color: textMuted,
                   fontSize: 13,
@@ -2111,7 +2111,7 @@ const _kQuickStarts = [
     colorHex: '#B57BFF',
     frequencyType: FrequencyType.daily,
     description:
-        'Sit quietly for 10 minutes — focus on breath, body scan, or guided session.',
+        'Sit quietly for 10 minutes - focus on breath, body scan, or guided session.',
   ),
   _QuickStart(
     emoji: '📚',
@@ -2128,7 +2128,7 @@ const _kQuickStarts = [
     frequencyType: FrequencyType.weekdays,
     frequencyConfig: WeekdaysConfig(weekdays: [1, 2, 3, 4, 5]),
     description:
-        'Run at least 3 km before work — pace doesn\'t matter, showing up does.',
+        'Run at least 3 km before work - pace doesn\'t matter, showing up does.',
   ),
 ];
 

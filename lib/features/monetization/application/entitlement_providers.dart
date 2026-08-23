@@ -66,8 +66,10 @@ final revenueCatIdentitySyncProvider = FutureProvider<void>((ref) async {
 
 /// Dev-only toggle: simulates Pro (`true`) or Free (`false`) at runtime.
 /// Only active in debug builds (`kDebugMode`). Ignored in release.
-/// Defaults to `true` so debug builds start as Pro.
-final devProOverrideProvider = StateProvider<bool>((ref) => true);
+/// Defaults to `false` so a fresh debug build starts in the free-tier
+/// state — every paywall gate (habit limit, Analytics, PDF export, etc.)
+/// is visible and testable without having to flip the switch first.
+final devProOverrideProvider = StateProvider<bool>((ref) => false);
 
 /// Whether the current user has an active premium entitlement.
 ///

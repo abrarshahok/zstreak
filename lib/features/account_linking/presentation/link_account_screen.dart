@@ -12,7 +12,7 @@ import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
-import '../../data_export/data_export_providers.dart';
+import '../../data_export/export_format_sheet.dart';
 import '../../guest/application/guest_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_screen.dart';
@@ -289,7 +289,7 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
                   child: TextButton(
                     onPressed: _isBusy
                         ? null
-                        : () => ref.read(dataExporterProvider).shareCsv(),
+                        : () => showExportFormatSheet(context, ref),
                     child: Text(
                       AppCopy.exportMyData,
                       style: TextStyle(color: textMuted, fontSize: 12),

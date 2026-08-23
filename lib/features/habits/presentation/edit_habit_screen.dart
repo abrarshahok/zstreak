@@ -906,7 +906,7 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                     controller: _targetUnitController,
                     style: TextStyle(color: textPrimary, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Unit — e.g. glasses, pages, minutes',
+                      hintText: 'Unit - e.g. glasses, pages, minutes',
                       hintStyle: TextStyle(
                         color: textMuted.withValues(alpha: 0.6),
                         fontSize: 13,

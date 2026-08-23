@@ -202,7 +202,7 @@ class GuestBanner extends ConsumerWidget {
       context: context,
       title: 'Log out?',
       body:
-          'You\'ll return to the start screen. Your local data stays on this device — link an account first if you want to keep it.',
+          'You\'ll return to the start screen. Your local data stays on this device - link an account first if you want to keep it.',
       confirmLabel: 'Log out',
       isDanger: true,
     );

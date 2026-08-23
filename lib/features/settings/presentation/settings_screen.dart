@@ -22,7 +22,7 @@ import '../../account_linking/presentation/link_account_screen.dart';
 import '../../auth/application/account_status_providers.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/auth_gate.dart';
-import '../../data_export/data_export_providers.dart';
+import '../../data_export/export_format_sheet.dart';
 import '../../guest/application/guest_providers.dart';
 import '../../habits/application/habit_providers.dart';
 import '../../monetization/application/entitlement_providers.dart';
@@ -129,11 +129,11 @@ class SettingsScreen extends ConsumerWidget {
                       _SettingsTile(
                         icon: Icons.ios_share_rounded,
                         label: AppCopy.exportMyData,
-                        subtitle: 'Free for everyone, always',
+                        subtitle: 'CSV is free - PDF report is Pro',
                         accent: accent,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
-                        onTap: () => ref.read(dataExporterProvider).shareCsv(),
+                        onTap: () => showExportFormatSheet(context, ref),
                       ),
                       if (isGuest) ...[
                         _Divider(isDark: isDark),
@@ -209,7 +209,7 @@ class SettingsScreen extends ConsumerWidget {
                           icon: Icons.pause_circle_outline,
                           label: 'Deactivate account',
                           subtitle:
-                              'Data is kept, not deleted — reactivate anytime',
+                              'Data is kept, not deleted - reactivate anytime',
                           accent: AppColors.danger,
                           textPrimary: AppColors.danger,
                           textMuted: textMuted,
@@ -418,7 +418,7 @@ class SettingsScreen extends ConsumerWidget {
       if (!context.mounted) return;
       AppSnackBar.show(
         context,
-        "Couldn't log out. Your data is still here — try again.",
+        "Couldn't log out. Your data is still here - try again.",
         type: SnackBarType.error,
       );
       return;
@@ -503,7 +503,7 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       title: 'Deactivate account?',
       body:
-          "Your data stays exactly as it is — nothing is deleted. You'll be signed out, and your habits become inaccessible until you reactivate. You have 30 days to change your mind before that guarantee expires.",
+          "Your data stays exactly as it is - nothing is deleted. You'll be signed out, and your habits become inaccessible until you reactivate. You have 30 days to change your mind before that guarantee expires.",
       confirmLabel: 'Deactivate',
       isDanger: true,
     );
@@ -890,8 +890,8 @@ class _DevProModeTile extends ConsumerWidget {
                 ),
                 Text(
                   isOn
-                      ? 'On — every paywall gate is unlocked'
-                      : 'Off — real entitlement is checked',
+                      ? 'On - every paywall gate is unlocked'
+                      : 'Off - real entitlement is checked',
                   style: TextStyle(color: textMuted, fontSize: 11),
                 ),
               ],
@@ -1002,7 +1002,7 @@ class _NotificationPermissionTileState
             ? Icons.notifications_active_outlined
             : Icons.notifications_off_outlined,
         label: 'Notifications',
-        subtitle: _granted ? 'Enabled — tap to manage' : 'Tap to enable',
+        subtitle: _granted ? 'Enabled - tap to manage' : 'Tap to enable',
         accent: _granted ? widget.accent : AppColors.danger,
         textPrimary: widget.textPrimary,
         textMuted: widget.textMuted,

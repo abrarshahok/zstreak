@@ -409,12 +409,12 @@ List<_HabitSpec> _buildSpecs(
       // the day-action sheet, never breaks the streak.
       skipDaysAgo: const {45, 100},
       notedDaysAgo: {
-        0: 'PB today — 5k in 24:12! 🔥',
+        0: 'PB today - 5k in 24:12! 🔥',
         1: 'Rainy but pushed through',
         7: '7-day milestone, feeling great',
         21: 'Three weeks back on track',
         30: 'Felt sick, took the day off',
-        45: 'Planned rest day — legs need it',
+        45: 'Planned rest day - legs need it',
         100: 'Planned rest day before the race',
       },
     ),
@@ -436,7 +436,7 @@ List<_HabitSpec> _buildSpecs(
         extraMiss: {200, 199, 150, 100, 99, 50, 49, 48},
       ),
       notedDaysAgo: {
-        0: 'Finished Atomic Habits — 10/10',
+        0: 'Finished Atomic Habits - 10/10',
         3: 'Started Deep Work by Cal Newport',
         14: 'Chapter 7 was mind-blowing',
         30: 'Finished The Almanack of Naval Ravikant',
@@ -459,7 +459,7 @@ List<_HabitSpec> _buildSpecs(
           'Drink 8 glasses of water throughout the day. Use the marked bottle to track intake.',
       valueByDaysAgo: _humanQuantity(90, 8, variance: 3, lowDays: {30, 29, 15}),
       notedDaysAgo: {
-        0: 'Added lemon — tastes way better',
+        0: 'Added lemon - tastes way better',
         7: 'Skin is noticeably clearer',
         30: 'Forgot most of the day, caught up late',
       },
@@ -475,13 +475,13 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 120,
       categoryId: 'fitness',
       description:
-          'Strength training session — push/pull/legs split. Log sets and reps in the notebook.',
+          'Strength training session - push/pull/legs split. Log sets and reps in the notebook.',
       completedDaysAgo: gymCompletedDays,
       // The two travel weeks are explicit skips, not silent gaps — the
       // streak survives them, same as a non-scheduled day would.
       skipDaysAgo: gymTravelDays,
       notedDaysAgo: {
-        0: 'New PR on bench — 100kg!',
+        0: 'New PR on bench - 100kg!',
         2: 'Leg day, absolutely destroyed',
         7: 'Back from travel, felt weak but showed up',
         14: 'Increased squat weight by 5kg',
@@ -509,7 +509,7 @@ List<_HabitSpec> _buildSpecs(
         0: '20 min body scan, very calm',
         1: 'Tried box breathing today',
         5: 'Mind was racing but stayed with it',
-        21: 'Back to 21 days — feels different this time',
+        21: 'Back to 21 days - feels different this time',
         90: 'Starting fresh after the gap',
       },
     ),
@@ -524,15 +524,15 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 45,
       categoryId: deepWork,
       description:
-          'Write at least one page — thoughts, wins, struggles, or gratitude. No filter, just write.',
+          'Write at least one page - thoughts, wins, struggles, or gratitude. No filter, just write.',
       completedDaysAgo: _daysAgoRange(45, 0),
       notedDaysAgo: {
         0: 'Wrote about the conversation with dad',
         2: 'Gratitude + 3 goals for the week',
         7: 'One week! Writing is getting easier',
         14: 'Noticed a pattern in my anxiety triggers',
-        30: '30 days — this is now a real habit',
-        45: 'First entry — why I want to journal',
+        30: '30 days - this is now a real habit',
+        45: 'First entry - why I want to journal',
       },
     ),
 
@@ -546,7 +546,7 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 60,
       categoryId: 'health',
       description:
-          'Zero added sugar for the day — no sweets, soda, or sugary sauces. Fruit is fine.',
+          'Zero added sugar for the day - no sweets, soda, or sugary sauces. Fruit is fine.',
       completedDaysAgo: {
         for (var d = 0; d <= 60; d++)
           if (d % 3 != 0) d, // misses every 3rd day
@@ -555,7 +555,7 @@ List<_HabitSpec> _buildSpecs(
         0: 'Craving hit hard at 3pm, drank water instead',
         1: 'Swapped dessert for fruit',
         7: 'Cravings are getting weaker',
-        15: 'Birthday party — had cake, back on track tomorrow',
+        15: 'Birthday party - had cake, back on track tomorrow',
       },
     ),
 
@@ -569,7 +569,7 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 180,
       categoryId: family,
       description:
-          'Call mom or dad — at least 15 minutes. Ask about their week, not just share updates.',
+          'Call mom or dad - at least 15 minutes. Ask about their week, not just share updates.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         180,
@@ -579,7 +579,7 @@ List<_HabitSpec> _buildSpecs(
       notedDaysAgo: {
         0: 'Mom shared a recipe, wrote it down',
         3: 'Dad told stories about his childhood',
-        7: 'Long call — 45 min, worth it',
+        7: 'Long call - 45 min, worth it',
       },
     ),
 
@@ -593,7 +593,7 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 90,
       categoryId: 'fitness',
       description:
-          'Full-body stretching routine — 15 minutes focusing on hips, hamstrings, and shoulders.',
+          'Full-body stretching routine - 15 minutes focusing on hips, hamstrings, and shoulders.',
       completedDaysAgo: _weekdayDaysAgo(
         today,
         90,
@@ -624,7 +624,7 @@ List<_HabitSpec> _buildSpecs(
         1: 'Felt electric all morning',
         7: 'No longer dreading it',
         14: 'Energy boost is real',
-        30: 'First day — lasted 30 seconds 😅',
+        30: 'First day - lasted 30 seconds 😅',
       },
     ),
 
@@ -638,7 +638,7 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 150,
       categoryId: 'learning',
       description:
-          'Study Spanish for 20+ minutes — vocab, grammar, or conversation practice. Goal: B2 by year end.',
+          'Study Spanish for 20+ minutes - vocab, grammar, or conversation practice. Goal: B2 by year end.',
       completedDaysAgo: _humanDaily(
         150,
         missEvery: 8,
@@ -663,7 +663,7 @@ List<_HabitSpec> _buildSpecs(
       categoryId: 'sleep',
       reminderTime: '22:45',
       description:
-          'Lights out by 11 PM — phone on charger outside the room, no screens for 30 min before.',
+          'Lights out by 11 PM - phone on charger outside the room, no screens for 30 min before.',
       completedDaysAgo: _humanDaily(
         60,
         missEvery: 7,
@@ -686,13 +686,13 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 21,
       categoryId: 'mind',
       description:
-          'Write 3 specific things I am grateful for today. Be specific — not just "family" but why.',
+          'Write 3 specific things I am grateful for today. Be specific - not just "family" but why.',
       completedDaysAgo: _daysAgoRange(21, 0),
       notedDaysAgo: {
         0: 'Grateful for: health, family, this app',
         3: 'Hard day but found 3 things anyway',
         7: 'Starting to notice beauty in small things',
-        21: 'Day 1 — trying something new',
+        21: 'Day 1 - trying something new',
       },
     ),
 
@@ -715,7 +715,7 @@ List<_HabitSpec> _buildSpecs(
       ),
       notedDaysAgo: {
         0: 'Q3 goals: 2/3 on track, 1 needs attention',
-        7: 'Best week in months — all habits green',
+        7: 'Best week in months - all habits green',
         14: 'Identified time sink: social media 2h/day',
         21: 'Adjusted morning routine, feels better',
       },
@@ -734,10 +734,10 @@ List<_HabitSpec> _buildSpecs(
           'No phone in the bedroom after 10 PM. Charger stays in the hallway. Book or nothing.',
       completedDaysAgo: _daysAgoRange(14, 0),
       notedDaysAgo: {
-        0: 'Read instead — fell asleep in 10 min',
+        0: 'Read instead - fell asleep in 10 min',
         1: 'Hardest part is not checking notifications',
         7: 'Dreams are more vivid',
-        14: 'Day 1 — phone charger moved to hallway',
+        14: 'Day 1 - phone charger moved to hallway',
       },
     ),
 
@@ -752,7 +752,7 @@ List<_HabitSpec> _buildSpecs(
       categoryId: 'fitness',
       targetCount: 50,
       targetUnit: 'reps',
-      description: '50 push-ups a day, any split — 5x10 or straight through.',
+      description: '50 push-ups a day, any split - 5x10 or straight through.',
       valueByDaysAgo: _humanQuantity(60, 50, variance: 15, lowDays: {20, 19}),
       notedDaysAgo: {
         0: 'Did them all in one set for the first time',
@@ -771,7 +771,7 @@ List<_HabitSpec> _buildSpecs(
       categoryId: 'health',
       targetCount: 8000,
       targetUnit: 'steps',
-      description: 'Hit 8,000 steps a day — walking meetings count.',
+      description: 'Hit 8,000 steps a day - walking meetings count.',
       valueByDaysAgo: _humanQuantity(
         45,
         8000,
@@ -791,10 +791,10 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 60,
       categoryId: 'health',
       isQuitHabit: true,
-      description: 'Quit for good this time — no exceptions, no "just one".',
+      description: 'Quit for good this time - no exceptions, no "just one".',
       completedDaysAgo: _daysAgoRange(60, 0, except: {35, 12}),
       notedDaysAgo: {
-        0: '60 days clean — longest ever',
+        0: '60 days clean - longest ever',
         35: 'Slipped at a work event. Back on it tomorrow',
         12: 'Rough day, gave in. Not proud but not giving up either',
       },
@@ -811,10 +811,10 @@ List<_HabitSpec> _buildSpecs(
       categoryId: personalGrowth,
       isQuitHabit: true,
       description:
-          'Sober by choice — reassessing the relationship with drinking.',
+          'Sober by choice - reassessing the relationship with drinking.',
       completedDaysAgo: _daysAgoRange(40, 0, except: {20}),
       notedDaysAgo: {
-        0: '40 days — sleeping so much better',
+        0: '40 days - sleeping so much better',
         20: 'Had a glass at a wedding. One day, not a spiral',
       },
     ),
@@ -862,7 +862,7 @@ List<_HabitSpec> _buildSpecs(
       createdDaysAgo: 45,
       categoryId: 'health',
       description:
-          'Take daily vitamins with breakfast — D3, magnesium, and omega-3.',
+          'Take daily vitamins with breakfast - D3, magnesium, and omega-3.',
       completedDaysAgo: _daysAgoRange(45, 16),
       archivedDaysAgo: 15,
       notedDaysAgo: const {},

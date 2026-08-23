@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
-import '../../data_export/data_export_providers.dart';
+import '../../data_export/export_format_sheet.dart';
 
 /// The one moment it's acceptable to fully block the guest (spec Section
 /// 3a) — data is genuinely at risk. Replaces Home entirely so check-ins
@@ -130,7 +130,7 @@ class GuestExpiredInterstitial extends ConsumerWidget {
                 // ── Export data ────────────────────────────────────────────
                 Center(
                   child: TextButton(
-                    onPressed: () => ref.read(dataExporterProvider).shareCsv(),
+                    onPressed: () => showExportFormatSheet(context, ref),
                     child: Text(
                       AppCopy.exportMyData,
                       style: TextStyle(color: textMuted, fontSize: 12),

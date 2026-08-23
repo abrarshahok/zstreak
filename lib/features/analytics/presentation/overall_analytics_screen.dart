@@ -15,7 +15,7 @@ import '../../habits/presentation/habit_detail_screen.dart';
 import '../../habits/presentation/widgets/year_heatmap.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
-import '../../data_export/data_export_providers.dart';
+import '../../data_export/export_format_sheet.dart';
 import '../domain/consistency_score.dart';
 import '../domain/leveling.dart';
 
@@ -101,7 +101,7 @@ class OverallAnalyticsScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: TextButton.icon(
-                onPressed: () => ref.read(dataExporterProvider).shareCsv(),
+                onPressed: () => showExportFormatSheet(context, ref),
                 icon: Icon(Icons.ios_share_rounded, size: 16, color: textMuted),
                 // A bare icon here gave no hint this exports *everything*
                 // (same full history Settings' "Export my data" does, not
@@ -260,7 +260,7 @@ class _AnalyticsProLock extends ConsumerWidget {
             ).animate().fadeIn(delay: 80.ms),
             const SizedBox(height: 8),
             Text(
-              'Unlock deep insights — consistency scores,\ntrend analysis, habit sparklines & more.',
+              'Unlock deep insights - consistency scores,\ntrend analysis, habit sparklines & more.',
               textAlign: TextAlign.center,
               style: TextStyle(color: textMuted, fontSize: 13, height: 1.5),
             ).animate().fadeIn(delay: 120.ms),
@@ -998,12 +998,12 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
     }
     if (consistencyScore >= 75) {
       return rateTrend != null && rateTrend > 0.05
-          ? '📈 Great momentum — you\'re improving!'
+          ? '📈 Great momentum - you\'re improving!'
           : '💪 Strong consistency. Keep it up!';
     }
     if (consistencyScore >= 50) {
       return rateTrend != null && rateTrend > 0
-          ? '↗️ Trending up — you\'re building the habit!'
+          ? '↗️ Trending up - you\'re building the habit!'
           : '🎯 Halfway there. Small steps every day.';
     }
     if (totalCheckIns == 0) {
@@ -1935,7 +1935,7 @@ class _MoodCorrelation extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                rate == null ? '—' : '${(rate * 100).round()}%',
+                rate == null ? '-' : '${(rate * 100).round()}%',
                 style: TextStyle(
                   color: rate == null
                       ? textMuted.withValues(alpha: 0.4)

@@ -32,12 +32,12 @@ class AppCopy {
   // Guest mode (Section 3a's 24-hour window)
   static const String guestModeLabel = "You're in guest mode.";
   static const String guestBannerLowKey =
-      'Guest mode — link an account anytime to save your streak.';
+      'Guest mode - link an account anytime to save your streak.';
   static const String guestBannerWarning =
       'Your guest streak expires soon. Link an account to keep it.';
   static const String guestExpiredTitle = "Your guest session's up.";
   static const String guestExpiredBody =
-      "Link an account to keep everything you've built — takes 10 seconds.";
+      "Link an account to keep everything you've built - takes 10 seconds.";
   static const String guestPayingReminderBanner =
       'Link your account to protect your subscription';
   static const String linkWithGoogle = 'Link with Google';
@@ -58,7 +58,7 @@ class AppCopy {
   static const String paywallRestorePurchases = 'Restore Purchases';
   static const String paywallGuestWarning =
       'Guest purchases are tied to this device only until you link an '
-      "account — link first (or right after) so you don't risk losing it.";
+      "account - link first (or right after) so you don't risk losing it.";
   static const String paywallPostPurchaseLinkPrompt =
       "That's a dub. Link an account now to protect your subscription?";
 
