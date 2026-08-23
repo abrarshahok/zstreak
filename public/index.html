@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -42,6 +42,7 @@
         --surface-el: #242424;
         --border: #2a2a2a;
         --accent: #b57bff;
+        --accent-rgb: 181, 123, 255;
         --accent-dim: rgba(181, 123, 255, 0.12);
         --accent-border: rgba(181, 123, 255, 0.25);
         --text: #f2f2f2;
@@ -56,6 +57,7 @@
           --surface-el: #f0f0f0;
           --border: #e5e5e5;
           --accent: #7c3aed;
+          --accent-rgb: 124, 58, 237;
           --accent-dim: rgba(124, 58, 237, 0.08);
           --accent-border: rgba(124, 58, 237, 0.2);
           --text: #111111;
@@ -68,6 +70,7 @@
         --surface-el: #f0f0f0;
         --border: #e5e5e5;
         --accent: #7c3aed;
+        --accent-rgb: 124, 58, 237;
         --accent-dim: rgba(124, 58, 237, 0.08);
         --accent-border: rgba(124, 58, 237, 0.2);
         --text: #111111;
@@ -79,6 +82,7 @@
         --surface-el: #242424;
         --border: #2a2a2a;
         --accent: #b57bff;
+        --accent-rgb: 181, 123, 255;
         --accent-dim: rgba(181, 123, 255, 0.12);
         --accent-border: rgba(181, 123, 255, 0.25);
         --text: #f2f2f2;
@@ -114,6 +118,9 @@
       img {
         display: block;
         max-width: 100%;
+      }
+      button {
+        font-family: inherit;
       }
 
       /* ── Layout ────────────────────────────────────────────────────────────────── */
@@ -169,70 +176,116 @@
       .nav-link:hover {
         color: var(--text);
       }
-      .nav-cta {
-        background: var(--accent);
+      .theme-toggle-btn {
+        background: var(--surface-el);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        font-size: 17px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+        flex-shrink: 0;
+      }
+
+      /* ── Play Store badge button (the one dominant CTA, repeated) ─────────────── */
+      .play-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: #000;
         color: #fff;
-        font-size: 13px;
-        font-weight: 700;
-        padding: 8px 18px;
+        padding: 10px 18px;
         border-radius: 10px;
-        transition: opacity 0.15s;
+        transition:
+          transform 0.15s,
+          opacity 0.15s;
+        border: 1px solid rgba(255, 255, 255, 0.12);
       }
-      @media (prefers-color-scheme: dark) {
-        html:not(.light) .nav-cta {
-          color: #000;
-        }
+      .play-badge:hover {
+        transform: translateY(-1px);
+        opacity: 0.9;
       }
-      html.dark .nav-cta {
-        color: #000;
+      .play-badge svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
       }
-      .nav-cta:hover {
-        opacity: 0.85;
+      .play-badge-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+      .play-badge-text .small {
+        font-size: 9px;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        color: #cfcfcf;
+        text-transform: uppercase;
+      }
+      .play-badge-text .big {
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .play-badge.compact {
+        padding: 9px 16px;
+      }
+      .play-badge.large {
+        padding: 13px 24px;
+      }
+      .play-badge.large .big {
+        font-size: 18px;
+      }
+
+      .link-quiet {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 500;
+        padding: 8px 4px;
+        transition: color 0.15s;
+      }
+      .link-quiet:hover {
+        color: var(--text);
       }
 
       /* ── Hero ──────────────────────────────────────────────────────────────────── */
       .hero {
-        padding: 100px 0 80px;
-        text-align: center;
+        padding: 88px 0 60px;
         position: relative;
         overflow: hidden;
       }
-      /* Radial glow behind hero content */
       .hero::before {
         content: "";
         position: absolute;
         top: -60px;
         left: 50%;
         transform: translateX(-50%);
-        width: 700px;
-        height: 500px;
+        width: 900px;
+        height: 560px;
         background: radial-gradient(
           ellipse at center,
-          rgba(181, 123, 255, 0.13) 0%,
+          rgba(var(--accent-rgb), 0.14) 0%,
           transparent 70%
         );
         pointer-events: none;
         z-index: 0;
       }
-      @media (prefers-color-scheme: light) {
-        html:not(.dark) .hero::before {
-          background: radial-gradient(
-            ellipse at center,
-            rgba(124, 58, 237, 0.08) 0%,
-            transparent 70%
-          );
-        }
-      }
-      html.light .hero::before {
-        background: radial-gradient(
-          ellipse at center,
-          rgba(124, 58, 237, 0.08) 0%,
-          transparent 70%
-        );
-      }
-      .hero > .container {
+      .hero-inner {
         position: relative;
         z-index: 1;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 48px;
+        align-items: center;
+        text-align: center;
       }
       .hero-badge {
         display: inline-flex;
@@ -242,99 +295,339 @@
         border: 1px solid var(--accent-border);
         border-radius: 20px;
         padding: 6px 14px;
-        margin-bottom: 28px;
+        margin-bottom: 24px;
         font-size: 12px;
         font-weight: 600;
         color: var(--accent);
         letter-spacing: 0.3px;
       }
       .hero h1 {
-        font-size: clamp(40px, 7vw, 76px);
+        font-size: clamp(36px, 6vw, 64px);
         font-weight: 900;
-        letter-spacing: -2.5px;
-        line-height: 1.03;
-        margin-bottom: 22px;
+        letter-spacing: -2px;
+        line-height: 1.06;
+        margin-bottom: 18px;
       }
       .hero h1 .accent {
         color: var(--accent);
       }
-      .hero p {
-        font-size: clamp(16px, 2.5vw, 20px);
+      .hero p.lede {
+        font-size: clamp(16px, 2.2vw, 19px);
         color: var(--muted);
-        max-width: 520px;
-        margin: 0 auto 40px;
-        line-height: 1.65;
+        max-width: 460px;
+        margin: 0 auto 30px;
+        line-height: 1.6;
       }
       .hero-actions {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 12px;
-        flex-wrap: wrap;
+        gap: 14px;
       }
-      .btn-primary {
-        display: inline-flex;
+      .hero-visual {
+        display: flex;
+        justify-content: center;
+      }
+
+      /* ── Trust strip ───────────────────────────────────────────────────────────── */
+      .trust-strip {
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        padding: 22px 0;
+      }
+      .trust-strip-inner {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 28px;
+      }
+      .trust-item {
+        display: flex;
         align-items: center;
         gap: 8px;
-        background: var(--accent);
-        color: #fff;
-        font-weight: 800;
-        font-size: 15px;
-        padding: 14px 28px;
-        border-radius: 12px;
-        transition:
-          opacity 0.15s,
-          transform 0.15s;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
       }
-      @media (prefers-color-scheme: dark) {
-        html:not(.light) .btn-primary {
-          color: #000;
+      .trust-item .dot {
+        color: var(--accent);
+      }
+
+      /* ── Screenshot showcase ───────────────────────────────────────────────────── */
+      .showcase {
+        padding: 96px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .showcase-track {
+        display: flex;
+        gap: 28px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
+        padding: 8px 24px 28px;
+        margin: 40px -24px 0;
+        scrollbar-width: none;
+      }
+      .showcase-track::-webkit-scrollbar {
+        display: none;
+      }
+      .showcase-item {
+        scroll-snap-align: start;
+        flex-shrink: 0;
+        width: 240px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+      /* Phone skin: sized by percentage, not px, so this one rule works
+         at any element width - the hero's larger phone and the showcase's
+         smaller ones share the exact same skin. Vertical radius/inset % =
+         horizontal % x 0.4737 (the fixed 1080:2280 screenshot aspect
+         ratio) so corners render circular instead of elliptical. */
+      .phone-frame {
+        width: 240px;
+        aspect-ratio: 1080 / 2280;
+        border-radius: 9.5% / 4.5%;
+        background: #050507;
+        border: 2px solid var(--border);
+        box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.4);
+        position: relative;
+        overflow: hidden;
+        flex-shrink: 0;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+      .showcase-item:hover .phone-frame {
+        transform: translateY(-4px);
+        box-shadow: 0 30px 80px -12px rgba(var(--accent-rgb), 0.4);
+      }
+      .phone-frame .notch {
+        position: absolute;
+        top: 1.28%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 9.55%;
+        height: 4px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.18);
+        z-index: 2;
+      }
+      .phone-frame img {
+        position: absolute;
+        top: 1%;
+        bottom: 1%;
+        left: 2.1%;
+        right: 2.1%;
+        width: auto;
+        height: auto;
+        border-radius: 7.46% / 3.53%;
+        object-fit: fill;
+        display: block;
+      }
+      .hero-visual .phone-frame {
+        width: 260px;
+        box-shadow: 0 40px 90px -16px rgba(var(--accent-rgb), 0.35);
+      }
+      @media (min-width: 480px) {
+        .hero-visual .phone-frame {
+          width: 300px;
         }
       }
-      html.dark .btn-primary {
-        color: #000;
+      .showcase-caption {
+        text-align: center;
+        max-width: 240px;
       }
-      .btn-primary:hover {
-        opacity: 0.88;
-        transform: translateY(-1px);
-      }
-      .btn-secondary {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: var(--surface);
-        color: var(--text);
-        font-weight: 600;
+      .showcase-caption-title {
         font-size: 15px;
-        padding: 14px 28px;
-        border-radius: 12px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .showcase-caption-sub {
+        font-size: 12.5px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .showcase-nav {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      .showcase-nav-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
         border: 1px solid var(--border);
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 16px;
+        color: var(--text);
         transition:
           border-color 0.15s,
           transform 0.15s;
       }
-      .btn-secondary:hover {
+      .showcase-nav-btn:hover {
         border-color: var(--accent);
         transform: translateY(-1px);
       }
-
-      /* ── Habit tile simulation ─────────────────────────────────────────────────── */
-      .hero-visual {
-        margin: 56px auto 0;
-        max-width: 560px;
-        user-select: none;
+      @media (min-width: 900px) {
+        .showcase-item,
+        .showcase-item .phone-frame {
+          width: 268px;
+        }
       }
-      .hero-visual-label {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 1.5px;
+
+      /* ── Section header (shared) ───────────────────────────────────────────────── */
+      .section-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--accent);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 1.8px;
         text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+      .section-title {
+        font-size: clamp(28px, 4vw, 44px);
+        font-weight: 900;
+        letter-spacing: -1.5px;
+        line-height: 1.08;
+        margin-bottom: 12px;
+      }
+      .section-sub {
         color: var(--muted);
-        margin-bottom: 14px;
-        opacity: 0.7;
+        font-size: 16px;
+        max-width: 480px;
+        margin-bottom: 56px;
+      }
+
+      /* ── Features ──────────────────────────────────────────────────────────────── */
+      .features {
+        padding: 96px 0;
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .feature-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px;
+        transition:
+          border-color 0.2s,
+          transform 0.2s;
+      }
+      .feature-card:hover {
+        border-color: var(--accent-border);
+        transform: translateY(-2px);
+      }
+      .feature-icon {
+        width: 44px;
+        height: 44px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-border);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        margin-bottom: 16px;
+      }
+      .feature-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .feature-desc {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      /* ── How it works + live demo ─────────────────────────────────────────────── */
+      .how {
+        padding: 96px 0;
+        border-top: 1px solid var(--border);
+      }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-top: 56px;
+      }
+      .step {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 28px;
+        position: relative;
+      }
+      .step-num {
+        width: 32px;
+        height: 32px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-border);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--accent);
+        margin-bottom: 16px;
+      }
+      .step-title {
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .step-desc {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .live-demo {
+        margin-top: 40px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 32px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 28px;
+        align-items: center;
+      }
+      @media (min-width: 720px) {
+        .live-demo {
+          grid-template-columns: 1fr 340px;
+        }
+      }
+      .live-demo-copy .section-label {
+        margin-bottom: 10px;
+      }
+      .live-demo-copy h3 {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin-bottom: 10px;
+      }
+      .live-demo-copy p {
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.6;
       }
       .mock-habit-row {
-        background: var(--surface);
+        background: var(--surface-el);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 16px 16px 12px;
@@ -352,15 +645,7 @@
         box-shadow: 0 6px 28px rgba(0, 0, 0, 0.22);
       }
       .mock-habit-row.checked {
-        border-color: rgba(181, 123, 255, 0.5);
-      }
-      @media (prefers-color-scheme: light) {
-        html:not(.dark) .mock-habit-row.checked {
-          border-color: rgba(124, 58, 237, 0.5);
-        }
-      }
-      html.light .mock-habit-row.checked {
-        border-color: rgba(124, 58, 237, 0.5);
+        border-color: rgba(var(--accent-rgb), 0.5);
       }
       .mock-tile-top {
         display: flex;
@@ -371,7 +656,7 @@
         width: 44px;
         height: 44px;
         border-radius: 50%;
-        background: var(--surface-el);
+        background: var(--surface);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -444,218 +729,6 @@
         color: var(--muted);
         margin-top: 14px;
         opacity: 0.7;
-      }
-
-      /* ── Marquee pill strip ────────────────────────────────────────────────────── */
-      .marquee-section {
-        padding: 40px 0;
-        border-top: 1px solid var(--border);
-        border-bottom: 1px solid var(--border);
-        overflow: hidden;
-        position: relative;
-      }
-      .marquee-track {
-        display: flex;
-        gap: 12px;
-        animation: marquee 28s linear infinite;
-        width: max-content;
-      }
-      .marquee-section:hover .marquee-track {
-        animation-play-state: paused;
-      }
-      @keyframes marquee {
-        from {
-          transform: translateX(0);
-        }
-        to {
-          transform: translateX(-50%);
-        }
-      }
-      .marquee-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 100px;
-        padding: 8px 18px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text);
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-      .marquee-pill .pill-icon {
-        font-size: 15px;
-      }
-
-      /* ── Features ──────────────────────────────────────────────────────────────── */
-      .features {
-        padding: 96px 0;
-      }
-      .section-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--accent);
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 1.8px;
-        text-transform: uppercase;
-        margin-bottom: 16px;
-      }
-      .section-title {
-        font-size: clamp(28px, 4vw, 44px);
-        font-weight: 900;
-        letter-spacing: -1.5px;
-        line-height: 1.08;
-        margin-bottom: 12px;
-      }
-      .section-sub {
-        color: var(--muted);
-        font-size: 16px;
-        max-width: 480px;
-        margin-bottom: 56px;
-      }
-      .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
-      }
-      .feature-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px;
-        transition:
-          border-color 0.2s,
-          transform 0.2s;
-      }
-      .feature-card:hover {
-        border-color: var(--accent-border);
-        transform: translateY(-2px);
-      }
-      .feature-icon {
-        width: 44px;
-        height: 44px;
-        background: var(--accent-dim);
-        border: 1px solid var(--accent-border);
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        margin-bottom: 16px;
-      }
-      .feature-title {
-        font-size: 16px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-      .feature-desc {
-        font-size: 13px;
-        color: var(--muted);
-        line-height: 1.6;
-      }
-
-      /* ── Testimonials ──────────────────────────────────────────────────────────── */
-      .testimonials {
-        padding: 96px 0;
-        border-top: 1px solid var(--border);
-      }
-      .testimonials-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
-        margin-top: 56px;
-      }
-      .testimonial-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      .testimonial-stars {
-        font-size: 14px;
-        letter-spacing: 2px;
-      }
-      .testimonial-quote {
-        font-size: 15px;
-        line-height: 1.65;
-        color: var(--text);
-        font-weight: 500;
-        flex: 1;
-      }
-      .testimonial-author {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .testimonial-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--accent-dim);
-        border: 1px solid var(--accent-border);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 16px;
-        flex-shrink: 0;
-      }
-      .testimonial-name {
-        font-size: 13px;
-        font-weight: 700;
-      }
-      .testimonial-handle {
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      /* ── How it works ──────────────────────────────────────────────────────────── */
-      .how {
-        padding: 96px 0;
-        border-top: 1px solid var(--border);
-      }
-      .steps {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-top: 56px;
-      }
-      .step {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px;
-        position: relative;
-      }
-      .step-num {
-        width: 32px;
-        height: 32px;
-        background: var(--accent-dim);
-        border: 1px solid var(--accent-border);
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 13px;
-        font-weight: 800;
-        color: var(--accent);
-        margin-bottom: 16px;
-      }
-      .step-title {
-        font-size: 15px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-      .step-desc {
-        font-size: 13px;
-        color: var(--muted);
-        line-height: 1.6;
       }
 
       /* ── Pricing ───────────────────────────────────────────────────────────────── */
@@ -762,33 +835,17 @@
         inset: 0;
         background: radial-gradient(
           ellipse at 50% 0%,
-          rgba(181, 123, 255, 0.12) 0%,
+          rgba(var(--accent-rgb), 0.12) 0%,
           transparent 65%
         );
         pointer-events: none;
-      }
-      @media (prefers-color-scheme: light) {
-        html:not(.dark) .cta-banner::before {
-          background: radial-gradient(
-            ellipse at 50% 0%,
-            rgba(124, 58, 237, 0.07) 0%,
-            transparent 65%
-          );
-        }
-      }
-      html.light .cta-banner::before {
-        background: radial-gradient(
-          ellipse at 50% 0%,
-          rgba(124, 58, 237, 0.07) 0%,
-          transparent 65%
-        );
       }
       .cta-banner > .container {
         position: relative;
         z-index: 1;
       }
       .cta-banner h2 {
-        font-size: clamp(32px, 5vw, 56px);
+        font-size: clamp(30px, 5vw, 52px);
         font-weight: 900;
         letter-spacing: -2px;
         line-height: 1.08;
@@ -796,8 +853,11 @@
       }
       .cta-banner p {
         color: var(--muted);
-        font-size: 17px;
-        margin-bottom: 36px;
+        font-size: 16px;
+        margin-bottom: 32px;
+      }
+      .cta-banner .hero-actions {
+        display: inline-flex;
       }
 
       /* ── Footer ────────────────────────────────────────────────────────────────── */
@@ -840,7 +900,7 @@
           display: none;
         }
         .hero {
-          padding: 64px 0 56px;
+          padding: 56px 0 44px;
         }
         .footer-inner {
           flex-direction: column;
@@ -859,37 +919,32 @@
             <span class="wordmark-text">ZSTREAK</span>
           </div>
           <div class="nav-links">
+            <a href="#screenshots" class="nav-link">Screenshots</a>
             <a href="#features" class="nav-link">Features</a>
             <a href="#how" class="nav-link">How it works</a>
             <a href="#pricing" class="nav-link">Pricing</a>
             <a href="privacy.html" class="nav-link">Privacy</a>
             <button
               id="themeToggle"
+              class="theme-toggle-btn"
               aria-label="Toggle light/dark mode"
-              style="
-                background: var(--surface-el);
-                border: 1px solid var(--border);
-                border-radius: 8px;
-                width: 36px;
-                height: 36px;
-                cursor: pointer;
-                font-size: 17px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition:
-                  background 0.2s,
-                  border-color 0.2s;
-                flex-shrink: 0;
-              "
             >
               🌙
             </button>
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-              class="nav-cta"
-              >Get the app ↗</a
+              class="play-badge compact"
             >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
+                />
+              </svg>
+              <span class="play-badge-text">
+                <span class="small">Get it on</span>
+                <span class="big">Google Play</span>
+              </span>
+            </a>
           </div>
         </div>
       </div>
@@ -897,101 +952,251 @@
 
     <!-- ── Hero ─────────────────────────────────────────────────────────────────── -->
     <section class="hero">
-      <div class="container">
-        <div class="hero-badge">⚡ Built for consistency</div>
-        <h1>
-          Build habits that<br /><span class="accent">actually stick.</span>
-        </h1>
-        <p>
-          Build habits, track streaks, log your mood, and see real progress
-          every day.
-        </p>
-        <div class="hero-actions">
-          <a
-            href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-            class="btn-primary"
-          >
-            ↓ Download for Android
-          </a>
-          <a href="#features" class="btn-secondary"> See how it works → </a>
+      <div class="container hero-inner">
+        <div>
+          <div class="hero-badge">⚡ Built for consistency</div>
+          <h1>The no-BS<br /><span class="accent">habit tracker.</span></h1>
+          <p class="lede">
+            Build habits, track streaks, log your mood, and see real progress
+            every day — no social feed, no gamification gimmicks.
+          </p>
+          <div class="hero-actions">
+            <a
+              href="https://play.google.com/store/apps/details?id=com.zstreak.app"
+              class="play-badge large"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
+                />
+              </svg>
+              <span class="play-badge-text">
+                <span class="small">Get it on</span>
+                <span class="big">Google Play</span>
+              </span>
+            </a>
+            <a href="#screenshots" class="link-quiet">See what it looks like ↓</a>
+          </div>
         </div>
-
-        <!-- Interactive habit tile -->
         <div class="hero-visual">
-          <p class="hero-visual-label">Try it — tap to check in</p>
-          <div id="habitTile"></div>
-          <p class="mock-hint">👆 Just like in the app</p>
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/home-dark.png"
+              alt="ZStreak home screen showing level, today's mood, streaks, and a habit list"
+              width="300"
+              height="633"
+            />
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ── Marquee pill strip ─────────────────────────────────────────────────── -->
-    <div class="marquee-section">
-      <div class="marquee-track" id="marqueeTrack">
-        <!-- Pills duplicated for seamless loop -->
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔥</span> Streak tracking</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📱</span> Home screen widget</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔔</span> Smart reminders</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">☁️</span> Cloud sync</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🎨</span> Custom colors & emojis</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📊</span> Analytics & insights</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📅</span> Flexible frequency</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">⚡</span> No-BS design</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔒</span> Your data, your control</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🌙</span> Dark & light mode</span
-        >
-        <!-- Duplicate for seamless loop -->
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔥</span> Streak tracking</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📱</span> Home screen widget</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔔</span> Smart reminders</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">☁️</span> Cloud sync</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🎨</span> Custom colors & emojis</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📊</span> Analytics & insights</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">📅</span> Flexible frequency</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">⚡</span> No-BS design</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🔒</span> Your data, your control</span
-        >
-        <span class="marquee-pill"
-          ><span class="pill-icon">🌙</span> Dark & light mode</span
-        >
+    <!-- ── Trust strip ───────────────────────────────────────────────────────────── -->
+    <div class="trust-strip">
+      <div class="container trust-strip-inner">
+        <div class="trust-item"><span class="dot">●</span> Free forever, up to 3 habits</div>
+        <div class="trust-item"><span class="dot">●</span> Works fully offline as a guest</div>
+        <div class="trust-item"><span class="dot">●</span> Export your data anytime — no lock-in</div>
+        <div class="trust-item"><span class="dot">●</span> No ads, ever</div>
       </div>
     </div>
+
+    <!-- ── Screenshot showcase ────────────────────────────────────────────────────── -->
+    <section class="showcase" id="screenshots">
+      <div class="container">
+        <div class="section-label">⚡ See it in action</div>
+        <h2 class="section-title">Real screens.<br />Real habits.</h2>
+        <p class="section-sub">
+          Every screenshot below is the actual app — nothing staged, nothing
+          faked.
+        </p>
+      </div>
+      <div class="showcase-track" id="showcaseTrack">
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/home-dark.png"
+              alt="ZStreak home screen in dark mode, showing level, mood, and today's habits"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Everything today, at a glance.</div>
+            <div class="showcase-caption-sub">
+              Level, mood, streaks, and your whole list, right up top.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/home-light.png"
+              alt="ZStreak home screen in light mode"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Light or dark. Your call.</div>
+            <div class="showcase-caption-sub">Looks just as good either way.</div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/home-variety.png"
+              alt="A colorful list of different habits, each with its own color and category"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">
+              However many habits. However you like them.
+            </div>
+            <div class="showcase-caption-sub">
+              Color-code, categorize, and make every streak your own.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/analytics-1.png"
+              alt="Analytics screen showing a consistency score, level, and 30-day activity chart"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Know exactly where you stand.</div>
+            <div class="showcase-caption-sub">
+              A consistency score, your level, and 30 days of activity in one view.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/analytics-2.png"
+              alt="Analytics screen showing a full year contribution heatmap and a per-habit breakdown"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">See the whole picture.</div>
+            <div class="showcase-caption-sub">
+              A full year at a glance, plus a breakdown for every habit.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/edit-habit-1.png"
+              alt="Add habit screen showing a 26-color palette, frequency picker, and categories"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Make it yours.</div>
+            <div class="showcase-caption-sub">
+              26 colors, flexible frequency, and your own categories.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/edit-habit-2.png"
+              alt="Add habit screen showing the quantity-tracking and quit-habit toggles"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Any habit, tracked your way.</div>
+            <div class="showcase-caption-sub">Track a number, or quit something for good.</div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/habit-detail-1.png"
+              alt="Habit detail screen showing streak stats and a monthly calendar"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Every habit has a story.</div>
+            <div class="showcase-caption-sub">
+              Streaks, completion rate, and full history at a glance.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/habit-detail-2.png"
+              alt="Habit detail screen showing a 30-day activity chart, best days, and a year heatmap"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">The deep dive.</div>
+            <div class="showcase-caption-sub">
+              30-day activity, your best days, and a year of progress.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/save-note.png"
+              alt="A bottom sheet for logging a day, with an optional note field"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Add detail anytime.</div>
+            <div class="showcase-caption-sub">
+              Notes on any day, without losing that day's status.
+            </div>
+          </div>
+        </div>
+        <div class="showcase-item">
+          <div class="phone-frame">
+            <div class="notch"></div>
+            <img
+              src="/screenshots/widget.png"
+              alt="ZStreak home screen widgets on an Android launcher"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-caption">
+            <div class="showcase-caption-title">Right on your home screen.</div>
+            <div class="showcase-caption-sub">Check in without even opening the app.</div>
+          </div>
+        </div>
+      </div>
+      <div class="container">
+        <div class="showcase-nav">
+          <button class="showcase-nav-btn" id="showcasePrev" aria-label="Previous screenshot">
+            ←
+          </button>
+          <button class="showcase-nav-btn" id="showcaseNext" aria-label="Next screenshot">
+            →
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- ── Features ──────────────────────────────────────────────────────────────── -->
     <section class="features" id="features">
@@ -1010,23 +1215,23 @@
             <div class="feature-title">Streak tracking</div>
             <div class="feature-desc">
               Visual streak counters and contribution grids keep you
-              accountable. See your progress at a glance — every single day.
+              accountable. See your progress at a glance, every single day.
             </div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">📅</div>
             <div class="feature-title">Flexible frequency</div>
             <div class="feature-desc">
-              Daily, weekly, or custom schedules. ZStreak adapts to your life —
-              not the other way around.
+              Daily, weekday-only, or a target number of times per week.
+              ZStreak adapts to your schedule, not the other way around.
             </div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🔔</div>
             <div class="feature-title">Smart reminders</div>
             <div class="feature-desc">
-              Set per-habit reminders at the exact time you need them.
-              Streak-at-risk alerts keep you from breaking the chain.
+              Per-habit reminders at the exact time you need them.
+              Streak-at-risk alerts warn you before the chain breaks.
             </div>
           </div>
           <div class="feature-card">
@@ -1041,78 +1246,16 @@
             <div class="feature-icon">☁️</div>
             <div class="feature-title">Cloud sync</div>
             <div class="feature-desc">
-              Your streaks follow you everywhere. Sign in with Google and your
-              data syncs instantly across all your devices.
+              Sign in with Google and your streaks follow you to every
+              device, instantly.
             </div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🎨</div>
-            <div class="feature-title">Custom colors</div>
+            <div class="feature-title">Custom colors & categories</div>
             <div class="feature-desc">
-              Give each habit its own color and emoji. Your habit board, your
-              aesthetic — dark or light, always sharp.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Testimonials ───────────────────────────────────────────────────────────── -->
-    <section class="testimonials">
-      <div class="container">
-        <div class="section-label">⚡ What people say</div>
-        <h2 class="section-title">Built for real people.</h2>
-        <p class="section-sub">
-          No fluff. No fake reviews. Just honest feedback from people who use it
-          daily.
-        </p>
-        <div class="testimonials-grid">
-          <div class="testimonial-card">
-            <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
-            <div class="testimonial-quote">
-              "Finally a habit tracker that doesn't try to gamify everything.
-              It's clean, fast, and the streak grid is genuinely motivating."
-            </div>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">🏃</div>
-              <div>
-                <div class="testimonial-name">Ahmed K.</div>
-                <div class="testimonial-handle">
-                  Morning runner · 60 day streak
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
-            <div class="testimonial-quote">
-              "The home screen widget is a game changer. I check in before I
-              even unlock my phone. My consistency went from 40% to 85%."
-            </div>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">📚</div>
-              <div>
-                <div class="testimonial-name">Sara M.</div>
-                <div class="testimonial-handle">
-                  Daily reader · 3 habits tracked
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">⭐⭐⭐⭐⭐</div>
-            <div class="testimonial-quote">
-              "I've tried 6 habit apps. ZStreak is the only one I've stuck with
-              past week 2. The design just gets out of your way."
-            </div>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">💪</div>
-              <div>
-                <div class="testimonial-name">Daniel R.</div>
-                <div class="testimonial-handle">
-                  Gym & meditation · 28 day streak
-                </div>
-              </div>
+              Give each habit its own color, emoji, and category. Your habit
+              board, your aesthetic, dark or light.
             </div>
           </div>
         </div>
@@ -1133,24 +1276,23 @@
             <div class="step-num">1</div>
             <div class="step-title">Download the app</div>
             <div class="step-desc">
-              Free on Android. No sign-up required — start as a guest and track
-              habits immediately.
+              Free on Android. No sign-up required — start as a guest and
+              track habits immediately.
             </div>
           </div>
           <div class="step">
             <div class="step-num">2</div>
             <div class="step-title">Add your first habit</div>
             <div class="step-desc">
-              Pick from templates or create your own. Set a name, emoji, color,
-              and frequency in seconds.
+              Set a name, emoji, color, and frequency in seconds.
             </div>
           </div>
           <div class="step">
             <div class="step-num">3</div>
             <div class="step-title">Check in daily</div>
             <div class="step-desc">
-              Tap to mark a habit done. Watch your streak grow. Get reminded if
-              you're about to break the chain.
+              Tap to mark a habit done. Watch your streak grow. Get reminded
+              if you're about to break the chain.
             </div>
           </div>
           <div class="step">
@@ -1160,6 +1302,22 @@
               Link your Google account to sync across devices and never lose
               your progress.
             </div>
+          </div>
+        </div>
+
+        <!-- Live, interactive demo of the actual tap-to-check-in interaction -->
+        <div class="live-demo">
+          <div class="live-demo-copy">
+            <div class="section-label">⚡ Try it yourself</div>
+            <h3>This is the exact tap.</h3>
+            <p>
+              No video, no GIF — this is a live rebuild of the real check-in
+              interaction. Tap the card.
+            </p>
+          </div>
+          <div>
+            <div id="habitTile"></div>
+            <p class="mock-hint">👆 Just like in the app</p>
           </div>
         </div>
       </div>
@@ -1188,8 +1346,15 @@
             </ul>
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-              class="btn-secondary"
-              style="display: block; text-align: center"
+              style="
+                display: block;
+                text-align: center;
+                padding: 14px;
+                border-radius: 12px;
+                border: 1px solid var(--border);
+                font-weight: 600;
+                font-size: 15px;
+              "
               >Get started free</a
             >
           </div>
@@ -1207,8 +1372,16 @@
             </ul>
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-              class="btn-primary"
-              style="display: block; text-align: center"
+              style="
+                display: block;
+                text-align: center;
+                padding: 14px;
+                border-radius: 12px;
+                background: var(--accent);
+                color: #fff;
+                font-weight: 700;
+                font-size: 15px;
+              "
               >Unlock Pro in the app ⚡</a
             >
           </div>
@@ -1221,13 +1394,22 @@
       <div class="container">
         <h2>Your streak starts<br />today. ⚡</h2>
         <p>Download ZStreak free and build the habits that define you.</p>
-        <a
-          href="https://play.google.com/store/apps/details?id=com.zstreak.app"
-          class="btn-primary"
-          style="font-size: 16px; padding: 16px 36px"
-        >
-          ↓ Download for Android
-        </a>
+        <div class="hero-actions">
+          <a
+            href="https://play.google.com/store/apps/details?id=com.zstreak.app"
+            class="play-badge large"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
+              />
+            </svg>
+            <span class="play-badge-text">
+              <span class="small">Get it on</span>
+              <span class="big">Google Play</span>
+            </span>
+          </a>
+        </div>
       </div>
     </section>
 
@@ -1278,6 +1460,30 @@
             applyTheme(!isDark);
           });
         }
+      })();
+
+      // ── Screenshot showcase scroll buttons ─────────────────────────────────────
+      (function () {
+        var track = document.getElementById("showcaseTrack");
+        var prev = document.getElementById("showcasePrev");
+        var next = document.getElementById("showcaseNext");
+        if (!track) return;
+
+        function scrollByCard(dir) {
+          var item = track.querySelector(".showcase-item");
+          var gap = 28;
+          var step = item ? item.getBoundingClientRect().width + gap : 260;
+          track.scrollBy({ left: dir * step, behavior: "smooth" });
+        }
+
+        if (prev)
+          prev.addEventListener("click", function () {
+            scrollByCard(-1);
+          });
+        if (next)
+          next.addEventListener("click", function () {
+            scrollByCard(1);
+          });
       })();
 
       // ── Habit tile simulation ────────────────────────────────────────────────────
