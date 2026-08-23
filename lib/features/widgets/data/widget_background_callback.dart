@@ -95,17 +95,20 @@ Future<void> widgetInteractivityCallback(Uri? uri) async {
       qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider',
     );
 
-    // For a signed-in (Firestore) user, toggleCheckIn's streak recompute
-    // each ran their own runTransaction — every Firestore transaction sets
-    // up an internal platform-channel stream that disposes itself
-    // asynchronously *after* its Future resolves, not synchronously as
-    // part of it. This isolate's engine gets torn down by home_widget's
-    // WorkManager worker as soon as this function returns, which can beat
-    // that disposal to the punch, so this delay holds the engine open
-    // long enough for that trailing cleanup to finish before it's
-    // destroyed, instead of it firing a harmless-but-noisy
-    // MissingPluginException ("... method cancel ...") mid-teardown.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // For a signed-in (Firestore) user, toggleCheckIn and its streak
+    // recompute each ran their own runTransaction — every Firestore
+    // transaction sets up an internal platform-channel stream that
+    // disposes itself asynchronously *after* its Future resolves, not
+    // synchronously as part of it. This isolate's engine gets torn down
+    // by home_widget's WorkManager worker as soon as this function
+    // returns, which can beat that disposal to the punch, so this delay
+    // holds the engine open long enough for both transactions' trailing
+    // cleanup to finish before it's destroyed, instead of it firing a
+    // harmless-but-noisy MissingPluginException ("... method cancel ...")
+    // mid-teardown. 300ms wasn't consistently enough in practice — bumped
+    // to 1s, which is still never felt as check-in latency since the
+    // widget's visible update already fired above.
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
   } catch (_) {
     // Swallowed — see comment above.
   }
