@@ -338,6 +338,15 @@ class HabitDetailScreen extends ConsumerWidget {
                         ),
                       ],
                     ).animate().fadeIn(delay: 240.ms),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap a day to log it. Long-press for a note, quantity, or to mark it skipped.',
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 11.5,
+                        height: 1.35,
+                      ),
+                    ).animate().fadeIn(delay: 240.ms),
 
                     const SizedBox(height: 10),
 
@@ -662,6 +671,31 @@ Future<void> showDayActionSheet(
               style: TextStyle(color: textPrimary),
               decoration: const InputDecoration(labelText: 'Note (optional)'),
             ),
+            // Only when the day already has a status - editing the note on
+            // a fresh, never-logged day still needs Complete/Skip/Clear to
+            // give it one. Reuses the exact same save path as those
+            // buttons (set chosen, then pop) so there's one save codepath,
+            // not two.
+            if (existing != null) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () {
+                    chosen = existing.status;
+                    Navigator.of(sheetContext).pop();
+                  },
+                  icon: Icon(Icons.check_rounded, size: 16, color: accent),
+                  label: Text(
+                    'Save note',
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 4),
           ],
         ),
@@ -669,9 +703,22 @@ Future<void> showDayActionSheet(
     },
   );
 
-  if (chosen == null) return;
   final note = noteController.text.trim();
   final value = int.tryParse(valueController.text.trim());
+  final noteChanged = note != (existing?.note?.trim() ?? '');
+  final valueChanged = habit.isQuantityHabit && value != existing?.value;
+
+  if (chosen == null) {
+    // No Complete/Skip/Clear button tapped - the sheet was dismissed some
+    // other way (tap outside, swipe down, back gesture). If the day
+    // already has a status and the user only edited the note or the
+    // logged quantity, save that against its existing status instead of
+    // silently discarding it - re-tapping the same status just to keep a
+    // note isn't something a user should have to do.
+    if (existing == null || !(noteChanged || valueChanged)) return;
+    chosen = existing.status;
+  }
+
   await ref
       .read(habitRepositoryProvider)
       .setCheckIn(
