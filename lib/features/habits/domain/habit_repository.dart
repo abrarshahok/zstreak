@@ -43,15 +43,21 @@ abstract class HabitRepository {
 
   /// Atomically flips a check-in's completed state — reads the current
   /// value and writes its negation within a single database transaction —
-  /// and returns the new value. Unlike [setCheckIn], which takes an
+  /// and returns the new completed value together with the freshly
+  /// recomputed current streak. Unlike [setCheckIn], which takes an
   /// explicit target computed by the caller from its own (possibly
   /// stale) snapshot, this is what the widget's own check-in button uses:
   /// two overlapping toggle calls for the same (habitId, date) — e.g. a
   /// rapid double-tap, where each tap spawns its own background isolate
   /// with no shared in-memory state — are serialized by the transaction
   /// instead of both reading the same pre-toggle state and colliding on
-  /// the same result (a "lost toggle").
-  Future<bool> toggleCheckIn({required String habitId, required String date});
+  /// the same result (a "lost toggle"). Returning the streak too lets
+  /// that same caller skip a separate [getHabitById] round-trip just to
+  /// read the one field a check-in actually changes.
+  Future<({bool completed, int currentStreak})> toggleCheckIn({
+    required String habitId,
+    required String date,
+  });
 
   /// Resets `current_streak` to 0 when [frequencyType] differs from the
   /// habit's stored type (spec Section 5a) — history and longest streak

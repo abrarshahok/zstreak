@@ -102,13 +102,13 @@ class WidgetSyncingHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<bool> toggleCheckIn({
+  Future<({bool completed, int currentStreak})> toggleCheckIn({
     required String habitId,
     required String date,
   }) async {
-    final newCompleted = await _inner.toggleCheckIn(habitId: habitId, date: date);
+    final result = await _inner.toggleCheckIn(habitId: habitId, date: date);
     await _syncHabit(habitId);
-    return newCompleted;
+    return result;
   }
 
   @override

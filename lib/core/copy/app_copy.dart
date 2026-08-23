@@ -62,10 +62,22 @@ class AppCopy {
   static const String paywallPostPurchaseLinkPrompt =
       "That's a dub. Link an account now to protect your subscription?";
 
-  // Generic auth errors (plain, non-technical — Section 3 screen 2)
+  // Generic auth errors (plain, non-technical — Section 3 screen 2). See
+  // core/utils/auth_error_messages.dart for the FirebaseAuthException ->
+  // message mapping that uses these.
   static const String errorNetwork =
       "Couldn't connect. Check your connection and try again.";
-  static const String errorInvalidCredentials =
-      "That email or password isn't right.";
+  static const String errorTooManyRequests =
+      'Too many attempts. Wait a bit and try again.';
+  static const String errorAccountDisabled =
+      "This account has been disabled. Contact support if you think that's a mistake.";
+  static const String errorOperationNotAllowed =
+      "That sign-in method isn't available right now.";
+  static const String errorInvalidCredential =
+      'That sign-in attempt is invalid or has expired. Try again.';
+  static const String errorRequiresRecentLogin =
+      'For your security, please sign in again to continue.';
+  static const String errorAccountConflict =
+      'An account with that email already exists.';
   static const String errorGeneric = 'Something went wrong. Try again.';
 }

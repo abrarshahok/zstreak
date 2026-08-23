@@ -1,3 +1,5 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,7 +60,21 @@ class AuthGate extends ConsumerWidget {
       // visible if the splash was already dismissed some other way, or
       // on a hot restart, which doesn't re-show the native splash at all.
       loading: () => _AuthLoadingIndicator(accent: accent),
-      error: (_, _) {
+      error: (error, stackTrace) {
+        // The auth-state stream itself erroring (e.g. a token refresh
+        // failure) used to be discarded with no trace at all — falling
+        // back to OnboardingScreen is still the only sane recovery (it
+        // lets the user attempt to sign in again), but silently losing
+        // the error meant this could never be diagnosed from Crashlytics.
+        if (!kDebugMode) {
+          FirebaseCrashlytics.instance.recordError(
+            error,
+            stackTrace,
+            reason: 'authStateProvider stream',
+          );
+        } else {
+          debugPrint('[AuthGate] authStateProvider error: $error\n$stackTrace');
+        }
         FlutterNativeSplash.remove();
         return const OnboardingScreen();
       },

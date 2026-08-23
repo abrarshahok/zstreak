@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -13,6 +14,7 @@ import 'package:app_settings/app_settings.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/theme/theme_mode_providers.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../../dev/seed_demo_data.dart';
@@ -355,7 +357,23 @@ class SettingsScreen extends ConsumerWidget {
       isDanger: true,
     );
     if (confirmed != true) return;
-    await ref.read(authRepositoryProvider).signOut();
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(e, st, reason: 'sign out');
+      } else {
+        debugPrint('[Settings] signOut failed: $e');
+      }
+      if (context.mounted) {
+        AppSnackBar.show(
+          context,
+          authErrorMessage(e),
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -382,16 +400,25 @@ class SettingsScreen extends ConsumerWidget {
 
       // ── Step 2: clear profile data from SharedPreferences ────────────────
       await ref.read(userProfileProvider.notifier).reset();
-    } catch (e) {
+    } catch (e, st) {
       // Without this, either step throwing left the user staring at
       // Settings with no indication anything went wrong — possibly
       // believing their data was wiped/they were logged out when neither
       // happened, unlike _confirmDeactivateAccount's identical shape a
       // few lines below, which already handles this.
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'guest log out',
+        );
+      } else {
+        debugPrint('[GuestLogOut] $e');
+      }
       if (!context.mounted) return;
       AppSnackBar.show(
         context,
-        'Could not log out: $e',
+        "Couldn't log out. Your data is still here — try again.",
         type: SnackBarType.error,
       );
       return;
@@ -438,8 +465,26 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     final uid = ref.read(authRepositoryProvider).currentUser?.uid;
-    if (uid != null) {
+    if (uid == null) return;
+    try {
       await ref.read(guestMetaRepositoryProvider).clearAllGuestData(uid);
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'clear guest data',
+        );
+      } else {
+        debugPrint('[Settings] clearAllGuestData failed: $e');
+      }
+      if (context.mounted) {
+        AppSnackBar.show(
+          context,
+          "Couldn't clear your data. Try again.",
+          type: SnackBarType.error,
+        );
+      }
     }
   }
 
@@ -469,19 +514,40 @@ class SettingsScreen extends ConsumerWidget {
 
     try {
       await ref.read(accountStatusRepositoryProvider).deactivate(uid);
-    } catch (e) {
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'account deactivate',
+        );
+      } else {
+        debugPrint('[Settings] deactivate failed: $e');
+      }
       if (!context.mounted) return;
       AppSnackBar.show(
         context,
-        'Could not deactivate account: $e',
+        "Couldn't deactivate your account. Try again.",
         type: SnackBarType.error,
       );
       return;
     }
 
     // Sign out immediately — the account is now inactive, so there's
-    // nothing left for this session to keep showing.
-    await ref.read(authRepositoryProvider).signOut();
+    // nothing left for this session to keep showing. If this fails, the
+    // account is still deactivated regardless (Firestore's rules already
+    // deny it), so AccountStatusGate will correctly show the locked
+    // screen on the next auth-state re-check even if this local sign-out
+    // didn't go through — worth recording, not worth blocking on.
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(e, st, reason: 'sign out');
+      } else {
+        debugPrint('[Settings] signOut after deactivate failed: $e');
+      }
+    }
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -507,11 +573,20 @@ class SettingsScreen extends ConsumerWidget {
         isPremium ? 'Restored.' : 'No previous purchase found.',
         type: isPremium ? SnackBarType.success : SnackBarType.warning,
       );
-    } catch (e) {
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'restore purchases',
+        );
+      } else {
+        debugPrint('[Settings] restorePurchases failed: $e');
+      }
       if (!context.mounted) return;
       AppSnackBar.show(
         context,
-        'Could not restore purchases: $e',
+        "Couldn't restore purchases. Try again.",
         type: SnackBarType.error,
       );
     }

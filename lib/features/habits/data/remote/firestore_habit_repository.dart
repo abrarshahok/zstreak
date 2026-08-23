@@ -153,7 +153,7 @@ class FirestoreHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<bool> toggleCheckIn({
+  Future<({bool completed, int currentStreak})> toggleCheckIn({
     required String habitId,
     required String date,
   }) async {
@@ -173,11 +173,15 @@ class FirestoreHabitRepository implements HabitRepository {
       }
       return newCompleted;
     });
-    await _recalculateStreak(habitId);
-    return newCompleted;
+    final currentStreak = await _recalculateStreak(habitId);
+    return (completed: newCompleted, currentStreak: currentStreak);
   }
 
-  Future<void> _recalculateStreak(String habitId) async {
+  /// Returns the freshly recomputed current streak so [toggleCheckIn] can
+  /// hand it straight back to callers (the widget's check-in callback in
+  /// particular) without a second round-trip to re-fetch the habit just
+  /// to read this one field.
+  Future<int> _recalculateStreak(String habitId) async {
     // No limit here on purpose: StreakCalculator recomputes from the full
     // completed-check-in history, so truncating this query (a previous
     // `.limit(400)` here) silently fed it an arbitrary subset once a habit
@@ -199,7 +203,7 @@ class FirestoreHabitRepository implements HabitRepository {
     // read the same stale longestStreak and overwrite each other's
     // update: the transaction retries automatically if the habit doc
     // changes between its read and commit.
-    await _firestore.runTransaction((transaction) async {
+    return _firestore.runTransaction((transaction) async {
       final habitDoc = await transaction.get(_habits.doc(habitId));
       final habit = _toDomain(habitDoc);
 
@@ -217,6 +221,7 @@ class FirestoreHabitRepository implements HabitRepository {
             ? result.longestStreak
             : habit.longestStreak,
       });
+      return result.currentStreak;
     });
   }
 

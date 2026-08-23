@@ -1,9 +1,13 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../auth/presentation/auth_gate.dart';
@@ -190,11 +194,27 @@ class _UserProfileQuestionsScreenState
         );
       }
     } catch (e, st) {
-      debugPrint('signInAnonymously failed: $e\n$st');
+      // This used to silently navigate to AuthGate regardless of success
+      // or failure — a user on airplane mode (or hitting
+      // 'operation-not-allowed' if anonymous auth were ever disabled)
+      // just got bounced back to onboarding with zero explanation of
+      // what went wrong, looking stuck in a loop. Staying on this screen
+      // (their answers are already saved locally above) with an actual
+      // error message lets them retry once conditions are fixed.
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'signInAnonymously',
+        );
+      } else {
+        debugPrint('signInAnonymously failed: $e\n$st');
+      }
       if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthGate()),
-          (_) => false,
+        AppSnackBar.show(
+          context,
+          authErrorMessage(e),
+          type: SnackBarType.error,
         );
       }
     } finally {

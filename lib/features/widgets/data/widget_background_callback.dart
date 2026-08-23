@@ -40,7 +40,13 @@ Future<void> widgetInteractivityCallback(Uri? uri) async {
   // silently no-op this one tap rather than crash the isolate outright.
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    await Firebase.initializeApp();
+    // Skips re-initializing Firebase when this isolate/engine is already
+    // set up from a previous tap — a real, if sometimes small, chunk of
+    // the delay a user feels between tapping check-in and seeing it
+    // reflected, on top of the unavoidable headless-isolate spin-up cost.
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     final HabitRepository repo = (user != null && !user.isAnonymous)
@@ -55,10 +61,21 @@ Future<void> widgetInteractivityCallback(Uri? uri) async {
     // read-then-write here would let two fast taps both read the same
     // pre-toggle value and collide on the same result — a tap that should
     // have cancelled a previous one instead silently gets lost.
-    final completedToday = await repo.toggleCheckIn(habitId: habitId, date: today);
-
-    final habit = await repo.getHabitById(habitId);
+    //
+    // getHabitById doesn't need to wait for that toggle to finish first —
+    // a check-in never changes a habit's name/emoji/color/frequency, only
+    // its streak (which toggleCheckIn already returns directly, so this
+    // read's own currentStreak field is simply discarded below rather
+    // than relied on). Starting both here instead of awaiting one before
+    // the other removes one whole sequential network round-trip from the
+    // critical path — real, felt latency for a signed-in (Firestore)
+    // user, not just visual redraw cost.
+    final toggleFuture = repo.toggleCheckIn(habitId: habitId, date: today);
+    final habitFuture = repo.getHabitById(habitId);
+    final toggleResult = await toggleFuture;
+    final habit = await habitFuture;
     if (habit == null) return;
+
     final checkIns = await repo.watchHabitCheckIns(habitId).first;
 
     // Writes name/emoji/color/streak/completedToday/grid in one shared
@@ -67,13 +84,28 @@ Future<void> widgetInteractivityCallback(Uri? uri) async {
     // which is why the check icon updated on a widget tap but the
     // contribution grid kept showing stale data.
     await WidgetSyncService().writeHabitData(
-      habit,
-      completedToday: completedToday,
+      habit.copyWith(
+        currentStreak: toggleResult.currentStreak,
+        updatedAt: habit.updatedAt,
+      ),
+      completedToday: toggleResult.completed,
       checkIns: checkIns,
     );
     await HomeWidget.updateWidget(
       qualifiedAndroidName: 'com.zstreak.app.HabitWidgetProvider',
     );
+
+    // For a signed-in (Firestore) user, toggleCheckIn's streak recompute
+    // each ran their own runTransaction — every Firestore transaction sets
+    // up an internal platform-channel stream that disposes itself
+    // asynchronously *after* its Future resolves, not synchronously as
+    // part of it. This isolate's engine gets torn down by home_widget's
+    // WorkManager worker as soon as this function returns, which can beat
+    // that disposal to the punch, so this delay holds the engine open
+    // long enough for that trailing cleanup to finish before it's
+    // destroyed, instead of it firing a harmless-but-noisy
+    // MissingPluginException ("... method cancel ...") mid-teardown.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
   } catch (_) {
     // Swallowed — see comment above.
   }

@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../../analytics/analytics_service.dart';
 import '../../monetization/presentation/paywall_screen.dart';
 import '../../onboarding/application/user_profile_provider.dart';
@@ -38,15 +38,6 @@ class SignInScreen extends ConsumerStatefulWidget {
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _isBusy = false;
-
-  String _messageFor(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'network-request-failed':
-        return AppCopy.errorNetwork;
-      default:
-        return AppCopy.errorGeneric;
-    }
-  }
 
   void _showError(String message) {
     if (!mounted) return;
@@ -81,10 +72,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         // Returning user — go straight to root (AuthGate handles routing).
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
-    } on FirebaseAuthException catch (e) {
-      _showError(_messageFor(e));
-    } catch (_) {
-      _showError(AppCopy.errorGeneric);
+    } catch (e) {
+      _showError(authErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }

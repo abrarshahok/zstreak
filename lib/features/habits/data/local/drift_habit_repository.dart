@@ -177,7 +177,7 @@ class DriftHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<bool> toggleCheckIn({
+  Future<({bool completed, int currentStreak})> toggleCheckIn({
     required String habitId,
     required String date,
   }) {
@@ -217,16 +217,19 @@ class DriftHabitRepository implements HabitRepository {
             );
       }
 
-      await _recalculateStreak(habitId);
-      return newCompleted;
+      final currentStreak = await _recalculateStreak(habitId);
+      return (completed: newCompleted, currentStreak: currentStreak);
     });
   }
 
   /// Recomputes current/longest streak from full check-in history and
   /// persists them (spec Section 5a) — run on every check-in write, never
   /// on read, so screens can just read the stored fields. Always called
-  /// from within [setCheckIn]'s transaction above.
-  Future<void> _recalculateStreak(String habitId) async {
+  /// from within [setCheckIn]'s transaction above. Returns the freshly
+  /// computed current streak so [toggleCheckIn] can hand it straight back
+  /// to callers (the widget's check-in callback in particular) without a
+  /// second round-trip to re-fetch the habit just to read this one field.
+  Future<int> _recalculateStreak(String habitId) async {
     final habit = _toDomain(
       await (_db.select(
         _db.habits,
@@ -253,6 +256,7 @@ class DriftHabitRepository implements HabitRepository {
         longestStreak: Value(_max(habit.longestStreak, result.longestStreak)),
       ),
     );
+    return result.currentStreak;
   }
 
   int _max(int a, int b) => a > b ? a : b;

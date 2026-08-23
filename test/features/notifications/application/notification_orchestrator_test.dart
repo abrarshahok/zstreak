@@ -57,8 +57,10 @@ class FakeHabitRepository implements HabitRepository {
     String? note,
   }) => throw UnimplementedError();
   @override
-  Future<bool> toggleCheckIn({required String habitId, required String date}) =>
-      throw UnimplementedError();
+  Future<({bool completed, int currentStreak})> toggleCheckIn({
+    required String habitId,
+    required String date,
+  }) => throw UnimplementedError();
   @override
   Future<void> updateHabit({
     required String id,

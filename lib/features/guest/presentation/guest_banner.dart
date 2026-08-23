@@ -1,9 +1,13 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../auth/application/auth_providers.dart';
@@ -203,7 +207,23 @@ class GuestBanner extends ConsumerWidget {
       isDanger: true,
     );
     if (confirmed != true) return;
-    await ref.read(authRepositoryProvider).signOut();
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(e, st, reason: 'sign out');
+      } else {
+        debugPrint('[GuestBanner] signOut failed: $e');
+      }
+      if (context.mounted) {
+        AppSnackBar.show(
+          context,
+          authErrorMessage(e),
+          type: SnackBarType.error,
+        );
+      }
+      return;
+    }
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AuthGate()),

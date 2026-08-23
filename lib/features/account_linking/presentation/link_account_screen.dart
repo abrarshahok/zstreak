@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
@@ -49,14 +52,16 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
             signInDirectly: repo.signInWithGoogleDirectly,
           );
         } else {
-          _showError(AppCopy.errorGeneric);
+          _showError(authErrorMessage(e));
         }
       }
     });
   }
 
   bool _isConflict(FirebaseAuthException e) =>
-      e.code == 'credential-already-in-use' || e.code == 'email-already-in-use';
+      e.code == 'credential-already-in-use' ||
+      e.code == 'email-already-in-use' ||
+      e.code == 'account-exists-with-different-credential';
 
   Future<void> _offerMerge({
     required String method,
@@ -124,14 +129,23 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
     setState(() => _isBusy = true);
     try {
       await action();
-    } catch (_) {
+    } catch (e, st) {
       // Without this, anything action() throws beyond the
       // FirebaseAuthException cases already handled inline (e.g. _finish's
       // migrate() failing on a flaky Firestore batch commit) went
       // completely unhandled — no snackbar, no feedback at all, even
       // though by that point linkWithGoogle() may have already succeeded
       // and left the account non-anonymous with an incomplete migration.
-      _showError(AppCopy.errorGeneric);
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'account linking',
+        );
+      } else {
+        debugPrint('[LinkAccountScreen] $e\n$st');
+      }
+      _showError(authErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }

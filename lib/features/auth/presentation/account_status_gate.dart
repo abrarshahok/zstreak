@@ -1,8 +1,12 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/utils/auth_error_messages.dart';
 import '../application/account_status_providers.dart';
 import '../application/auth_providers.dart';
 import '../domain/account_status.dart';
@@ -32,22 +36,56 @@ class AccountStatusGate extends ConsumerWidget {
 
   final Widget child;
 
-  Future<void> _reactivate(WidgetRef ref) async {
+  Future<void> _reactivate(BuildContext context, WidgetRef ref) async {
     final uid = ref.read(authRepositoryProvider).currentUser?.uid;
     if (uid == null) return;
     try {
       await ref.read(accountStatusRepositoryProvider).reactivate(uid);
-    } catch (_) {
+    } catch (e, st) {
       // The reactivate button is never shown once the window has passed,
       // so reaching this should be unreachable in practice — but
       // Firestore's own rule rejects the write past the deadline too
       // (the real enforcement), and a rejected write must not surface as
-      // an unhandled exception if it's ever somehow triggered.
+      // an unhandled exception if it's ever somehow triggered. Still
+      // worth recording and telling the user, rather than a tap that
+      // silently does nothing.
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'account reactivate',
+        );
+      } else {
+        debugPrint('[AccountStatusGate] reactivate failed: $e');
+      }
+      if (context.mounted) {
+        AppSnackBar.show(
+          context,
+          authErrorMessage(e),
+          type: SnackBarType.error,
+        );
+      }
     }
   }
 
-  Future<void> _signOut(WidgetRef ref) =>
-      ref.read(authRepositoryProvider).signOut();
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } catch (e, st) {
+      if (!kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(e, st, reason: 'sign out');
+      } else {
+        debugPrint('[AccountStatusGate] signOut failed: $e');
+      }
+      if (context.mounted) {
+        AppSnackBar.show(
+          context,
+          authErrorMessage(e),
+          type: SnackBarType.error,
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,7 +139,7 @@ class AccountStatusGate extends ConsumerWidget {
             : 'Your account has been restricted and is temporarily inaccessible. Contact support if you think this is a mistake.',
         primaryLabel: 'Contact support',
         onPrimary: () => launchUrl(Uri.parse('mailto:zstreak26@gmail.com')),
-        onSignOut: () => _signOut(ref),
+        onSignOut: () => _signOut(context, ref),
       );
     }
 
@@ -113,8 +151,8 @@ class AccountStatusGate extends ConsumerWidget {
           ? "Nothing was deleted. Reactivate to pick up right where you left off — you have ${record.daysUntilDeadline} day${record.daysUntilDeadline == 1 ? '' : 's'} left in your reactivation window."
           : 'Nothing was deleted. Reactivate to pick up right where you left off.',
       primaryLabel: 'Reactivate account',
-      onPrimary: () => _reactivate(ref),
-      onSignOut: () => _signOut(ref),
+      onPrimary: () => _reactivate(context, ref),
+      onSignOut: () => _signOut(context, ref),
     );
   }
 }
