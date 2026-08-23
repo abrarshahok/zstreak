@@ -62,6 +62,16 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // R8 shrinking + obfuscation - was off entirely (Play Console's
+            // "optimisation/obfuscation/shrinking" scores were stuck around
+            // 55%, i.e. whatever Dart's own AOT/tree-shaking contributes,
+            // with zero contribution from the Android/Kotlin side).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
