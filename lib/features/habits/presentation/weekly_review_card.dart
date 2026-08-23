@@ -79,27 +79,29 @@ class _WeekStats {
   final Habit? mostMissedHabit;
 }
 
+/// Monday of the week this review recaps — the week ending *today* (shown
+/// Sunday evening) or last week (shown Monday, since weekday-1 alone
+/// always lands on the Monday of the CURRENT week; stepping the reference
+/// date back 7 days first is what lands Monday's math on *last* week's
+/// Monday instead — see [_shouldShowWeeklyReview]).
+DateTime _reviewedWeekStart(DateTime now) {
+  final referenceDate = now.weekday == DateTime.monday
+      ? now.subtract(const Duration(days: 7))
+      : now;
+  return DateTime(
+    referenceDate.year,
+    referenceDate.month,
+    referenceDate.day,
+  ).subtract(Duration(days: referenceDate.weekday - 1));
+}
+
 /// Computes weekly stats from [streakDetails] keyed by habit.
 /// Uses the last 7 days of each habit's day-status list.
 _WeekStats _computeWeekStats(
   List<Habit> habits,
   Map<String, List<dynamic>> daysByHabit,
 ) {
-  final now = DateTime.now();
-  // _shouldShowWeeklyReview shows this on Sunday evening (recapping the
-  // week ending *today*) or on Monday (recapping the week that just
-  // *ended*, i.e. last week) — but weekday-1 alone always lands on the
-  // Monday of the CURRENT week. On Sunday that's correct (today's week);
-  // on Monday it's wrong (today, not last week), which is why the card
-  // used to say "no check-ins recorded this week yet" every Monday. Step
-  // the reference date back 7 days first so Monday's math lands on last
-  // week's Monday instead.
-  final referenceDate = now.weekday == DateTime.monday
-      ? now.subtract(const Duration(days: 7))
-      : now;
-  final weekStart = referenceDate.subtract(
-    Duration(days: referenceDate.weekday - 1),
-  ); // Monday
+  final weekStart = _reviewedWeekStart(DateTime.now());
   final weekDates = List.generate(7, (i) {
     final d = weekStart.add(Duration(days: i));
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -166,6 +168,23 @@ class WeeklyReviewCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isVisible = ref.watch(weeklyReviewVisibilityProvider);
     if (!isVisible) return const SizedBox.shrink();
+
+    // Nothing to recap if every habit was created after the reviewed week
+    // ended — e.g. a brand-new install on a Monday, recapping *last* week,
+    // when the user's only habit was added today. Without this, a fresh
+    // account sees an empty "Weekly Review" for a week it didn't exist for.
+    final weekEnd = _reviewedWeekStart(
+      DateTime.now(),
+    ).add(const Duration(days: 6));
+    final hasHistoryForReviewedWeek = habits.any((h) {
+      final createdDate = DateTime(
+        h.createdAt.year,
+        h.createdAt.month,
+        h.createdAt.day,
+      );
+      return !createdDate.isAfter(weekEnd);
+    });
+    if (!hasHistoryForReviewedWeek) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppColors.surface : AppColors.surfaceLight;

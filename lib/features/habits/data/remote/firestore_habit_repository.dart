@@ -199,17 +199,24 @@ class FirestoreHabitRepository implements HabitRepository {
   /// hand it straight back to callers (the widget's check-in callback in
   /// particular) without a second round-trip to re-fetch the habit just
   /// to read this one field.
+  /// Document IDs in `check_ins` are the date string itself (see the
+  /// `d.id` usage below), so ordering by documentId is a reliable
+  /// chronological order — unlike the old unordered `.limit(400)` that
+  /// silently sampled an arbitrary subset once a habit passed ~400
+  /// check-ins, breaking currentStreak for exactly the longest-lived
+  /// habits. Ordering first means a capped read still reliably gets the
+  /// most *recent* history: correct as long as the actual current streak
+  /// doesn't exceed this window (a year-plus unbroken streak), and
+  /// longestStreak can never regress below what's already stored, since
+  /// the write below always takes the max against the existing value.
+  static const _recalculateStreakReadLimit = 400;
+
   Future<int> _recalculateStreak(String habitId) async {
-    // No limit here on purpose: StreakCalculator recomputes from the full
-    // check-in history, so truncating this query (a previous `.limit(400)`
-    // here) silently fed it an arbitrary subset once a habit passed ~400
-    // check-ins — wrong streaks for exactly the longest-lived habits. Reads
-    // still scale with habit age, but that's an honest cost, not a silent
-    // correctness bug. Every status (not just completed) is fetched now,
-    // since a skip needs to be visible to the calculator too.
     final checkInsSnap = await _habits
         .doc(habitId)
         .collection('check_ins')
+        .orderBy(FieldPath.documentId, descending: true)
+        .limit(_recalculateStreakReadLimit)
         .get();
     final statusByDate = {
       for (final d in checkInsSnap.docs)

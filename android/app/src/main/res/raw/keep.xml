@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  flutter_local_notifications is handed "@drawable/ic_stat_notify" as a Dart
+  string, not a static Android reference the resource shrinker can trace -
+  isShrinkResources strips it in release otherwise, which makes the plugin's
+  own initialize() call fail its icon validation before it ever reaches the
+  notification-permission request, and makes any later scheduled notification
+  crash the process (null default icon -> NPE unboxing in setSmallIcon).
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_notify" />

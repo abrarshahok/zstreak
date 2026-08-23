@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "245868538464-30mhhkjdaak7rpm9r6ful5o2pdh20dhq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zstreak.app",
+            "certificate_hash": "9562a291eb04198e14d540aa6252a4d221eaf397"
+          }
+        },
+        {
           "client_id": "245868538464-76v0a1o5mo8fipvmeikmg5pre68p217c.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
