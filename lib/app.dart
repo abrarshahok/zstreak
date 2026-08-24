@@ -166,7 +166,27 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
                   // Auth currently reports — after the Firestore sync above,
                   // so an older remote profile with no photoUrl never
                   // clobbers it.
-                  profileNotifier.setPhotoUrl(user?.photoURL, uid: uid);
+                  //
+                  // user.photoURL itself is only ever populated at account
+                  // *creation* time — this app's primary path is guest-first
+                  // (anonymous sign-in, then linkWithCredential later), and
+                  // Firebase never copies a linked provider's profile photo
+                  // onto the base User object, only onto that provider's own
+                  // entry in providerData. Falling back to the google.com
+                  // provider's photoURL there is what actually makes this
+                  // work for the common linked-guest path, not just a
+                  // fresh direct sign-in.
+                  String? googlePhotoUrl = user?.photoURL;
+                  if (googlePhotoUrl == null) {
+                    for (final info in user?.providerData ?? const []) {
+                      if (info.providerId == 'google.com' &&
+                          info.photoURL != null) {
+                        googlePhotoUrl = info.photoURL;
+                        break;
+                      }
+                    }
+                  }
+                  profileNotifier.setPhotoUrl(googlePhotoUrl, uid: uid);
                 });
               })
               .whenComplete(() {
