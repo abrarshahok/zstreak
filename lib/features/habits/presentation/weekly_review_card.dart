@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/prefs/shared_preferences_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/color_hex.dart';
+import '../../analytics/presentation/overall_analytics_screen.dart';
 import '../application/habit_providers.dart';
 import '../domain/habit.dart';
 import '../domain/streak_calculator.dart';
@@ -341,6 +342,38 @@ class WeeklyReviewCard extends ConsumerWidget {
                       ),
                     ),
                   ],
+
+                  const SizedBox(height: 12),
+                  Container(height: 1, color: border),
+                  const SizedBox(height: 10),
+
+                  // ── View full analytics ─────────────────────────────────────
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const OverallAnalyticsScreen(),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'View full analytics',
+                          style: TextStyle(
+                            color: accent,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: accent,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

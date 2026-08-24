@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/local_date.dart';
 import '../../habits/application/habit_providers.dart';
 import '../application/home_tour_providers.dart';
 
@@ -56,6 +57,31 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     // still be an empty AsyncLoading snapshot even for a user who
     // actually has habits, which would wrongly skip the habit-card step.
     final habits = await ref.read(activeHabitsProvider.future);
+    if (!mounted) return;
+
+    // Home's cards each source their own data live (mood card, streak
+    // bar, weekly review, every habit tile), so the habit list alone
+    // isn't "loaded" — e.g. MoodCard renders its taller "not logged yet"
+    // layout until moodEntryProvider's first snapshot lands, then
+    // collapses to a short chip, shifting every card below it. Measuring
+    // GlobalKey positions before all of these have their first value in
+    // means the tour builds its whole step list from a layout that's
+    // about to move.
+    final today = todayLocalDateString();
+    await Future.wait([
+      ref.read(moodEntryProvider(today).future),
+      for (final h in habits) ref.read(streakDetailProvider(h).future),
+      for (final h in habits)
+        ref.read(checkInProvider(CheckInQuery(h.id, today)).future),
+    ]);
+    if (!mounted) return;
+
+    // Riverpod notifies watchers as soon as those futures resolve, but
+    // the widgets that watch them (MoodCard, the streak bar, habit
+    // tiles) only actually repaint at the *next* frame — reading
+    // GlobalKey positions synchronously after the awaits above would
+    // still see the pre-data layout.
+    await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
 
     final keys = ref.read(homeTourKeysProvider);
@@ -119,6 +145,13 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
           key: keys.firstHabitKey,
           accent: accent,
           isDark: isDark,
+          // Forced rather than left to _alignFor's space comparison — the
+          // habit list stretches on below this card, so "more room below"
+          // is almost always true regardless of screen size, which kept
+          // placing the card over the *next* habit card instead of in the
+          // clearly-empty space above (mood card / streak bar / weekly
+          // review, all already-seen steps by this point).
+          forceAlign: ContentAlign.top,
           title: 'Your habits',
           body:
               'Tap a habit to check it off for today, or see its full '
@@ -194,6 +227,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     required String body,
     double radius = 14,
     AlignmentGeometry? alignSkip,
+    ContentAlign? forceAlign,
   }) {
     return TargetFocus(
       keyTarget: key,
@@ -203,7 +237,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
       alignSkip: alignSkip,
       contents: [
         TargetContent(
-          align: _alignFor(key),
+          align: forceAlign ?? _alignFor(key),
           builder: (context, controller) => _TourCard(
             title: title,
             body: body,

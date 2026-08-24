@@ -122,6 +122,30 @@ class HomeScreen extends ConsumerWidget {
                     );
                   }
 
+                  // The habit list itself is the only thing `habits.when`
+                  // above actually gates — every card below it (mood,
+                  // streak bar, weekly review, each habit tile) sources
+                  // its own data live and renders instantly regardless,
+                  // so without this the very first frame after habits
+                  // load shows each one's pre-data placeholder (MoodCard's
+                  // larger "not logged yet" layout, a streak bar reading
+                  // 0/0, habit tiles with no streak) and then visibly
+                  // reflows a moment later as each stream's first
+                  // snapshot lands. This skeleton mirrors that same
+                  // mood-card / streak-bar / habit-list shape (rather than
+                  // the generic habits.when one above, which has no habit
+                  // count yet to size itself from) so the one moment
+                  // content is still arriving reads as "this page" loading,
+                  // not a different, unrelated placeholder.
+                  if (!_isHomeDataReady(ref, list)) {
+                    return SliverToBoxAdapter(
+                      child: _HomeContentSkeleton(
+                        isDark: isDark,
+                        habitCount: list.length,
+                      ),
+                    );
+                  }
+
                   // Only categories with at least one habit are worth
                   // offering as a filter — an empty category chip would just
                   // be a dead end.
@@ -335,6 +359,165 @@ class _AddHabitFab extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Home data readiness ──────────────────────────────────────────────────────
+
+/// Whether every stream Home's cards read from — beyond just the habit
+/// list itself — has delivered its first value: today's mood entry, and
+/// each habit's streak detail and today's check-in. Watches (not reads)
+/// each provider so this recomputes and flips the skeleton off the moment
+/// the last one lands, the same way `habits.when`'s own loading state
+/// already does for the habit list.
+bool _isHomeDataReady(WidgetRef ref, List<Habit> habits) {
+  final today = todayLocalDateString();
+  if (!ref.watch(moodEntryProvider(today)).hasValue) return false;
+  for (final h in habits) {
+    if (!ref.watch(streakDetailProvider(h)).hasValue) return false;
+    if (!ref.watch(checkInProvider(CheckInQuery(h.id, today))).hasValue) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ─── Home content skeleton (mood/streak/habits still loading) ────────────────
+
+/// Mirrors the actual shape of Home's "All mode" stack — MoodCard, the
+/// Level/check-ins ring row, then one row per habit — used once the habit
+/// list itself has loaded but [_isHomeDataReady] is still waiting on mood
+/// or per-habit streak/check-in data. Shaped like the real thing rather
+/// than reusing [_HabitListSkeleton]'s generic rows so this reads as "this
+/// page, still loading" instead of a swap to an unrelated placeholder.
+class _HomeContentSkeleton extends StatelessWidget {
+  const _HomeContentSkeleton({
+    required this.isDark,
+    required this.habitCount,
+  });
+
+  final bool isDark;
+  final int habitCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isDark: isDark,
+      builder: (context, colors) {
+        return Column(
+          children: [
+            // ── Mood card ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: ShimmerCard(
+                colors: colors,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    ShimmerCircle(size: 22, color: colors.border),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ShimmerBlock(
+                        height: 12,
+                        width: double.infinity,
+                        color: colors.border,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Level / check-ins ring row ───────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(child: _ringCard(colors)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _ringCard(colors)),
+                ],
+              ),
+            ),
+
+            // ── Habit rows — one per real habit, capped like the generic
+            // skeleton so a large list doesn't produce an oversized one.
+            ...List.generate(habitCount.clamp(1, 5), (i) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: ShimmerCard(
+                  colors: colors,
+                  height: 80,
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      ShimmerCircle(size: 44, color: colors.border),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ShimmerBlock(
+                              height: 13,
+                              width: double.infinity,
+                              color: colors.border,
+                            ),
+                            const SizedBox(height: 8),
+                            ShimmerBlock(
+                              height: 10,
+                              width: 80,
+                              color: colors.border,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ShimmerCircle(size: 40, color: colors.border),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One [_RingStatCard]-shaped placeholder — same ring size, gap, and
+  /// two-line text stack as the real card.
+  Widget _ringCard(ShimmerColors colors) {
+    return ShimmerCard(
+      colors: colors,
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          ShimmerCircle(size: 38, color: colors.border),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShimmerBlock(
+                  height: 13,
+                  width: double.infinity,
+                  color: colors.border,
+                ),
+                const SizedBox(height: 6),
+                ShimmerBlock(height: 10, width: 50, color: colors.border),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
