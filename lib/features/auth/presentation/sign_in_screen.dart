@@ -9,6 +9,7 @@ import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/auth_error_messages.dart';
+import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../analytics/analytics_service.dart';
 import '../../monetization/presentation/paywall_screen.dart';
 import '../../onboarding/application/user_profile_provider.dart';
@@ -161,15 +162,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         textPrimary: textPrimary,
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'By continuing, you agree to our Terms and Privacy Policy.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: textMuted,
-                          fontSize: 11,
-                          height: 1.4,
-                        ),
-                      ),
+                      TermsPrivacyNotice(textMuted: textMuted, accent: accent),
                     ],
                   )
                   .animate()

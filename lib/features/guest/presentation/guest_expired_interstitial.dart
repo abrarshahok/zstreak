@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../data_export/export_format_sheet.dart';
 
@@ -124,6 +125,11 @@ class GuestExpiredInterstitial extends ConsumerWidget {
                     .animate(delay: 260.ms)
                     .fadeIn(duration: 400.ms)
                     .slideY(begin: 0.1, end: 0),
+
+                const SizedBox(height: 16),
+                TermsPrivacyNotice(textMuted: textMuted, accent: accent)
+                    .animate(delay: 300.ms)
+                    .fadeIn(duration: 400.ms),
 
                 const SizedBox(height: 20),
 

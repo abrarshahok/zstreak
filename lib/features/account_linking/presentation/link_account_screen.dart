@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
+import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../data_export/export_format_sheet.dart';
@@ -286,6 +287,11 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
                     .animate(delay: 200.ms)
                     .fadeIn(duration: 350.ms)
                     .slideY(begin: 0.08, end: 0),
+
+                const SizedBox(height: 16),
+                TermsPrivacyNotice(textMuted: textMuted, accent: accent)
+                    .animate(delay: 240.ms)
+                    .fadeIn(duration: 350.ms),
 
                 const SizedBox(height: 24),
 

@@ -12,7 +12,6 @@ import '../../../core/widgets/shimmer_loading.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
-import '../../auth/presentation/sign_in_screen.dart';
 import '../application/entitlement_providers.dart';
 
 // ─── Offerings provider ───────────────────────────────────────────────────────
@@ -1498,41 +1497,6 @@ class _GuestGateSheet extends ConsumerWidget {
               child: const Text(
                 'Sign up - it\'s free',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Secondary CTA — Sign in
-          GestureDetector(
-            onTap: () {
-              Navigator.of(context).pop(); // close sheet
-              // Same reasoning as the sign-up button above.
-              Navigator.of(parentContext).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const SignInScreen(
-                    fromOnboarding: false,
-                    thenPaywall: true,
-                  ),
-                ),
-              );
-            },
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Already have an account? ',
-                    style: TextStyle(color: textMuted, fontSize: 13),
-                  ),
-                  TextSpan(
-                    text: 'Sign in',
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),

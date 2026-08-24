@@ -12,7 +12,10 @@ class AppCopy {
   static const String signInHeadline = "Let's lock in.";
   static const String continueWithGoogle = 'Continue with Google';
   static const String continueAsGuest = 'Continue as guest';
-  static const String signIn = 'Sign in';
+  // The app has no email/password path — every "sign in" is a Google
+  // sign-in, so this says so up front instead of implying a form that
+  // doesn't exist.
+  static const String signIn = 'Sign in with Google';
   static const String createAccount = 'Create account';
 
   // Onboarding / benefits (Section 3, screen 1) — sell the outcome, not
