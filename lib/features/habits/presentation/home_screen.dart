@@ -13,6 +13,8 @@ import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../analytics/domain/leveling.dart';
 import '../../analytics/presentation/overall_analytics_screen.dart';
+import '../../home_tour/application/home_tour_providers.dart';
+import '../../home_tour/presentation/home_tour_overlay.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../../onboarding/application/user_profile_provider.dart';
@@ -69,170 +71,194 @@ class HomeScreen extends ConsumerWidget {
     // Watch entitlement — treat loading/error as "not Pro" (safe default).
     final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
     final limit = AppConfig.freeTierHabitLimit;
+    final tourKeys = ref.watch(homeTourKeysProvider);
 
-    return Scaffold(
-      backgroundColor: bg,
-      body: CustomScrollView(
-        slivers: [
-          _HomeAppBar(
-            banner: banner,
-            isDark: isDark,
-            viewMode: viewMode,
-            focusMode: focusMode,
-            onToggleView: () => ref.read(_homeViewModeProvider.notifier).state =
-                viewMode == _ViewMode.list ? _ViewMode.grid : _ViewMode.list,
-            onToggleFocus: (mode) =>
-                ref.read(_homeFocusModeProvider.notifier).state = mode,
-          ),
-          SliverPadding(
-            // Flat 96 (sized to clear the FAB) used to sit partly behind
-            // a device's system nav bar instead of being visible space
-            // above it — same fix as HabitDetailScreen's bottom padding.
-            padding: EdgeInsets.fromLTRB(
-              0,
-              0,
-              0,
-              96 + MediaQuery.of(context).padding.bottom,
+    return HomeTourOverlay(
+      child: Scaffold(
+        backgroundColor: bg,
+        body: CustomScrollView(
+          slivers: [
+            _HomeAppBar(
+              banner: banner,
+              isDark: isDark,
+              viewMode: viewMode,
+              focusMode: focusMode,
+              onToggleView: () =>
+                  ref
+                      .read(_homeViewModeProvider.notifier)
+                      .state = viewMode == _ViewMode.list
+                  ? _ViewMode.grid
+                  : _ViewMode.list,
+              onToggleFocus: (mode) =>
+                  ref.read(_homeFocusModeProvider.notifier).state = mode,
+              viewToggleKey: tourKeys.viewToggleKey,
+              analyticsKey: tourKeys.analyticsKey,
+              archiveKey: tourKeys.archiveKey,
+              settingsKey: tourKeys.settingsKey,
             ),
-            sliver: habits.when(
-              loading: () =>
-                  SliverToBoxAdapter(child: _HabitListSkeleton(isDark: isDark)),
-              error: (error, _) =>
-                  SliverToBoxAdapter(child: _HabitsLoadError(isDark: isDark)),
-              data: (list) {
-                if (list.isEmpty) {
-                  return SliverToBoxAdapter(child: _EmptyState(isDark: isDark));
-                }
+            SliverPadding(
+              // Flat 96 (sized to clear the FAB) used to sit partly behind
+              // a device's system nav bar instead of being visible space
+              // above it — same fix as HabitDetailScreen's bottom padding.
+              padding: EdgeInsets.fromLTRB(
+                0,
+                0,
+                0,
+                96 + MediaQuery.of(context).padding.bottom,
+              ),
+              sliver: habits.when(
+                loading: () => SliverToBoxAdapter(
+                  child: _HabitListSkeleton(isDark: isDark),
+                ),
+                error: (error, _) =>
+                    SliverToBoxAdapter(child: _HabitsLoadError(isDark: isDark)),
+                data: (list) {
+                  if (list.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: _EmptyState(isDark: isDark),
+                    );
+                  }
 
-                // Only categories with at least one habit are worth
-                // offering as a filter — an empty category chip would just
-                // be a dead end.
-                final usedCategoryIds = list
-                    .map((h) => h.categoryId)
-                    .whereType<String>()
-                    .toSet();
-                final filterableCategories = categories
-                    .where((c) => usedCategoryIds.contains(c.id))
-                    .toList();
-                final categoryFiltered = categoryFilter == null
-                    ? list
-                    : list
-                          .where((h) => h.categoryId == categoryFilter)
-                          .toList();
+                  // Only categories with at least one habit are worth
+                  // offering as a filter — an empty category chip would just
+                  // be a dead end.
+                  final usedCategoryIds = list
+                      .map((h) => h.categoryId)
+                      .whereType<String>()
+                      .toSet();
+                  final filterableCategories = categories
+                      .where((c) => usedCategoryIds.contains(c.id))
+                      .toList();
+                  final categoryFiltered = categoryFilter == null
+                      ? list
+                      : list
+                            .where((h) => h.categoryId == categoryFilter)
+                            .toList();
 
-                final categoryChips = filterableCategories.isEmpty
-                    ? null
-                    : SliverToBoxAdapter(
-                        child: _CategoryFilterRow(
-                          categories: filterableCategories,
-                          selectedId: categoryFilter,
-                          isDark: isDark,
-                          onSelected: (id) =>
-                              ref
-                                  .read(_homeCategoryFilterProvider.notifier)
-                                  .state = (categoryFilter == id
-                              ? null
-                              : id),
-                        ),
-                      );
-
-                if (categoryFiltered.isEmpty) {
-                  return SliverMainAxisGroup(
-                    slivers: [
-                      if (categoryChips != null) categoryChips,
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 40,
+                  final categoryChips = filterableCategories.isEmpty
+                      ? null
+                      : SliverToBoxAdapter(
+                          child: _CategoryFilterRow(
+                            categories: filterableCategories,
+                            selectedId: categoryFilter,
+                            isDark: isDark,
+                            onSelected: (id) =>
+                                ref
+                                    .read(_homeCategoryFilterProvider.notifier)
+                                    .state = (categoryFilter == id
+                                ? null
+                                : id),
                           ),
-                          child: Text(
-                            'No habits in this category.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.textMuted
-                                  : AppColors.textMutedLight,
+                        );
+
+                  if (categoryFiltered.isEmpty) {
+                    return SliverMainAxisGroup(
+                      slivers: [
+                        if (categoryChips != null) categoryChips,
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 40,
+                            ),
+                            child: Text(
+                              'No habits in this category.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppColors.textMuted
+                                    : AppColors.textMutedLight,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  );
-                }
+                      ],
+                    );
+                  }
 
-                // ── Determine visible vs locked habits (both focus modes) ──
-                // Computed before branching on focus mode — Today Focus
-                // used to receive the full unfiltered `list` here, which
-                // meant a free user hit their habit limit in "All" but saw
-                // every habit, paywall gate and all, the moment they
-                // switched to "Today". Same gate, both views now. Applied
-                // after the category filter, so the limit reflects what's
-                // actually being shown.
-                final visibleList = (!isPro && categoryFiltered.length > limit)
-                    ? categoryFiltered.sublist(0, limit)
-                    : categoryFiltered;
-                final lockedCount = (!isPro && categoryFiltered.length > limit)
-                    ? categoryFiltered.length - limit
-                    : 0;
+                  // ── Determine visible vs locked habits (both focus modes) ──
+                  // Computed before branching on focus mode — Today Focus
+                  // used to receive the full unfiltered `list` here, which
+                  // meant a free user hit their habit limit in "All" but saw
+                  // every habit, paywall gate and all, the moment they
+                  // switched to "Today". Same gate, both views now. Applied
+                  // after the category filter, so the limit reflects what's
+                  // actually being shown.
+                  final visibleList =
+                      (!isPro && categoryFiltered.length > limit)
+                      ? categoryFiltered.sublist(0, limit)
+                      : categoryFiltered;
+                  final lockedCount =
+                      (!isPro && categoryFiltered.length > limit)
+                      ? categoryFiltered.length - limit
+                      : 0;
 
-                // ── Today Focus mode ─────────────────────────────────────
-                if (focusMode == _FocusMode.today) {
+                  // ── Today Focus mode ─────────────────────────────────────
+                  if (focusMode == _FocusMode.today) {
+                    return SliverMainAxisGroup(
+                      slivers: [
+                        if (categoryChips != null) categoryChips,
+                        SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
+                        _TodayFocusSliver(
+                          habits: visibleList,
+                          isDark: isDark,
+                          lockedCount: lockedCount,
+                          firstHabitKey: tourKeys.firstHabitKey,
+                        ),
+                      ],
+                    );
+                  }
+
+                  // ── All mode ─────────────────────────────────────────────
                   return SliverMainAxisGroup(
                     slivers: [
                       if (categoryChips != null) categoryChips,
                       SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
-                      _TodayFocusSliver(
-                        habits: visibleList,
-                        isDark: isDark,
-                        lockedCount: lockedCount,
-                      ),
-                    ],
-                  );
-                }
-
-                // ── All mode ─────────────────────────────────────────────
-                return SliverMainAxisGroup(
-                  slivers: [
-                    if (categoryChips != null) categoryChips,
-                    SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
-                    SliverToBoxAdapter(
-                      child: _StreakSummaryBar(
-                        habits: visibleList,
-                        isDark: isDark,
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: WeeklyReviewCard(habits: visibleList),
-                    ),
-                    if (viewMode == _ViewMode.list)
                       SliverToBoxAdapter(
-                        child: _ReorderableHabitList(habits: visibleList),
-                      )
-                    else
-                      SliverToBoxAdapter(
-                        child: _ReorderableHabitGrid(habits: visibleList),
-                      ),
-                    // ── Paywall gate card (free tier / expired) ──────────
-                    if (lockedCount > 0)
-                      SliverToBoxAdapter(
-                        child: _PaywallGateCard(
-                          lockedCount: lockedCount,
+                        child: _StreakSummaryBar(
+                          habits: visibleList,
                           isDark: isDark,
                         ),
                       ),
-                  ],
-                );
-              },
+                      SliverToBoxAdapter(
+                        child: WeeklyReviewCard(habits: visibleList),
+                      ),
+                      if (viewMode == _ViewMode.list)
+                        SliverToBoxAdapter(
+                          child: _ReorderableHabitList(
+                            habits: visibleList,
+                            firstHabitKey: tourKeys.firstHabitKey,
+                          ),
+                        )
+                      else
+                        SliverToBoxAdapter(
+                          child: _ReorderableHabitGrid(
+                            habits: visibleList,
+                            firstHabitKey: tourKeys.firstHabitKey,
+                          ),
+                        ),
+                      // ── Paywall gate card (free tier / expired) ──────────
+                      if (lockedCount > 0)
+                        SliverToBoxAdapter(
+                          child: _PaywallGateCard(
+                            lockedCount: lockedCount,
+                            isDark: isDark,
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: _AddHabitFab(
-        isDark: isDark,
-        isPro: isPro,
-        habitCount: habits.valueOrNull?.length ?? 0,
-        limit: limit,
+          ],
+        ),
+        floatingActionButton: _AddHabitFab(
+          key: tourKeys.fabKey,
+          isDark: isDark,
+          isPro: isPro,
+          habitCount: habits.valueOrNull?.length ?? 0,
+          limit: limit,
+        ),
       ),
     );
   }
@@ -242,6 +268,7 @@ class HomeScreen extends ConsumerWidget {
 
 class _AddHabitFab extends ConsumerWidget {
   const _AddHabitFab({
+    super.key,
     required this.isDark,
     required this.isPro,
     required this.habitCount,
@@ -410,10 +437,12 @@ class _TodayFocusSliver extends ConsumerWidget {
     required this.habits,
     required this.isDark,
     this.lockedCount = 0,
+    this.firstHabitKey,
   });
 
   final List<Habit> habits;
   final bool isDark;
+  final GlobalKey? firstHabitKey;
 
   /// Habits withheld by the free-tier limit — already excluded from
   /// [habits] by the caller. Shown here as a lock card, same as "All" mode,
@@ -496,7 +525,11 @@ class _TodayFocusSliver extends ConsumerWidget {
           SliverList.builder(
             itemCount: todayHabits.length,
             itemBuilder: (context, index) {
-              return HabitTile(habit: todayHabits[index], isListMode: false)
+              return HabitTile(
+                    key: index == 0 ? firstHabitKey : null,
+                    habit: todayHabits[index],
+                    isListMode: false,
+                  )
                   .animate()
                   .fadeIn(delay: (60 + 40 * index).ms)
                   .slideY(begin: 0.06, duration: 250.ms, curve: Curves.easeOut);
@@ -699,9 +732,10 @@ class _RingPainter extends CustomPainter {
 //     the list a second time.
 
 class _ReorderableHabitList extends ConsumerStatefulWidget {
-  const _ReorderableHabitList({required this.habits});
+  const _ReorderableHabitList({required this.habits, this.firstHabitKey});
 
   final List<Habit> habits;
+  final GlobalKey? firstHabitKey;
 
   @override
   ConsumerState<_ReorderableHabitList> createState() =>
@@ -785,7 +819,11 @@ class _ReorderableHabitListState extends ConsumerState<_ReorderableHabitList> {
         return ReorderableDelayedDragStartListener(
           key: ValueKey(habit.id),
           index: index,
-          child: HabitTile(habit: habit, isListMode: true),
+          child: HabitTile(
+            key: index == 0 ? widget.firstHabitKey : null,
+            habit: habit,
+            isListMode: true,
+          ),
         );
       },
     );
@@ -798,9 +836,10 @@ class _ReorderableHabitListState extends ConsumerState<_ReorderableHabitList> {
 // Optimistic local state + _reordering guard prevent stream-driven re-renders.
 
 class _ReorderableHabitGrid extends ConsumerStatefulWidget {
-  const _ReorderableHabitGrid({required this.habits});
+  const _ReorderableHabitGrid({required this.habits, this.firstHabitKey});
 
   final List<Habit> habits;
+  final GlobalKey? firstHabitKey;
 
   @override
   ConsumerState<_ReorderableHabitGrid> createState() =>
@@ -886,7 +925,10 @@ class _ReorderableHabitGridState extends ConsumerState<_ReorderableHabitGrid> {
           return ReorderableItemView(
             key: ValueKey(habit.id),
             index: index,
-            child: HabitGridCard(habit: habit),
+            child: HabitGridCard(
+              key: index == 0 ? widget.firstHabitKey : null,
+              habit: habit,
+            ),
           );
         },
       ),
@@ -1388,6 +1430,10 @@ class _HomeAppBar extends ConsumerWidget {
     required this.focusMode,
     required this.onToggleView,
     required this.onToggleFocus,
+    this.viewToggleKey,
+    this.analyticsKey,
+    this.archiveKey,
+    this.settingsKey,
   });
 
   final Widget? banner;
@@ -1396,6 +1442,10 @@ class _HomeAppBar extends ConsumerWidget {
   final _FocusMode focusMode;
   final VoidCallback onToggleView;
   final ValueChanged<_FocusMode> onToggleFocus;
+  final GlobalKey? viewToggleKey;
+  final GlobalKey? analyticsKey;
+  final GlobalKey? archiveKey;
+  final GlobalKey? settingsKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1475,6 +1525,7 @@ class _HomeAppBar extends ConsumerWidget {
                           ),
                         ),
                         _IconBtn(
+                          key: viewToggleKey,
                           icon: viewMode == _ViewMode.list
                               ? Icons.grid_view_rounded
                               : Icons.view_list_rounded,
@@ -1490,6 +1541,7 @@ class _HomeAppBar extends ConsumerWidget {
                         // visible entry point in the app bar shouldn't
                         // depend on someone discovering that by accident.
                         _IconBtn(
+                          key: analyticsKey,
                           icon: Icons.bar_chart_rounded,
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute(
@@ -1500,6 +1552,7 @@ class _HomeAppBar extends ConsumerWidget {
                           tooltip: 'Analytics',
                         ),
                         _IconBtn(
+                          key: archiveKey,
                           icon: Icons.archive_outlined,
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute(
@@ -1510,6 +1563,7 @@ class _HomeAppBar extends ConsumerWidget {
                           tooltip: 'Archived habits',
                         ),
                         _IconBtn(
+                          key: settingsKey,
                           icon: Icons.settings_outlined,
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute(
@@ -1696,6 +1750,7 @@ class _ProBadge extends StatelessWidget {
 
 class _IconBtn extends StatelessWidget {
   const _IconBtn({
+    super.key,
     required this.icon,
     required this.onPressed,
     required this.isDark,

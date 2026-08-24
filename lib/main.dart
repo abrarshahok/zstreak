@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'core/prefs/shared_preferences_provider.dart';
 import 'core/theme/theme_mode_providers.dart';
+import 'features/home_tour/application/home_tour_providers.dart';
 import 'features/onboarding/application/onboarding_providers.dart';
 import 'features/widgets/data/widget_background_callback.dart';
 
@@ -76,6 +77,9 @@ Future<void> main() async {
         sharedPreferencesProvider.overrideWithValue(prefs),
         onboardingCompleteProvider.overrideWith(
           (ref) => readOnboardingCompleteFromPrefs(prefs),
+        ),
+        homeTourSeenProvider.overrideWith(
+          (ref) => readHomeTourSeenFromPrefs(prefs),
         ),
         themeModeProvider.overrideWith((ref) => readThemeModeFromPrefs(prefs)),
       ],
