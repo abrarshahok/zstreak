@@ -6,6 +6,7 @@ import 'package:home_widget/home_widget.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../habits/application/habit_providers.dart';
+import '../../habits/presentation/edit_habit_screen.dart';
 import '../../monetization/application/entitlement_providers.dart';
 import '../../monetization/presentation/paywall_navigation.dart';
 import '../application/widget_providers.dart';
@@ -232,6 +233,19 @@ class WidgetConfigureScreen extends ConsumerWidget {
             letterSpacing: -0.3,
           ),
         ),
+        // Lets someone add a widget for a habit they haven't created yet
+        // without leaving this screen — previously the only way out of an
+        // empty (or incomplete) list here was to back out, go create the
+        // habit elsewhere, then redo the whole widget-placement flow.
+        actions: [
+          IconButton(
+            icon: Icon(Icons.add_rounded, color: textPrimary),
+            tooltip: 'Add habit',
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const EditHabitScreen())),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: border),
@@ -247,10 +261,43 @@ class WidgetConfigureScreen extends ConsumerWidget {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Text(
-                  'Create a habit first, then add the widget again.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: textMuted, fontSize: 14, height: 1.5),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "You don't have any habits yet.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textMuted,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const EditHabitScreen()),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Add a habit',
+                            style: TextStyle(
+                              color: isDark ? Colors.black : Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
