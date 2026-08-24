@@ -77,6 +77,18 @@ final categoriesProvider = StreamProvider<List<HabitCategory>>((ref) {
 /// `.distinct()` with a fingerprint that excludes exactly those two
 /// fields turns that write into a no-op for every listener of this
 /// provider, without moving where the fields live in either backend.
+///
+/// A drag-to-reorder write is the same story for a third field,
+/// sortOrder — excluded from each habit's own fingerprint below, *and*
+/// the whole-list comparison is done as an order-independent multiset
+/// rather than position-by-position, since a reorder is precisely a
+/// change in which habit sits at which position. Both
+/// _ReorderableHabitList and _ReorderableHabitGrid (home_screen.dart)
+/// already keep their own local order and only resync from this
+/// provider's list when the *set* of habit ids changes — sortOrder from
+/// here was already being ignored downstream, so suppressing it upstream
+/// too just stops every other card on Home (mood, streak bar, weekly
+/// review) from rebuilding for a change nothing was actually reading.
 final activeHabitsProvider = StreamProvider<List<Habit>>((ref) {
   return ref
       .watch(habitRepositoryProvider)
@@ -86,20 +98,21 @@ final activeHabitsProvider = StreamProvider<List<Habit>>((ref) {
 
 bool _sameHabitListStructure(List<Habit> a, List<Habit> b) {
   if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (_structuralFingerprint(a[i]) != _structuralFingerprint(b[i])) {
-      return false;
-    }
+  final aFingerprints = a.map(_structuralFingerprint).toList()..sort();
+  final bFingerprints = b.map(_structuralFingerprint).toList()..sort();
+  for (var i = 0; i < aFingerprints.length; i++) {
+    if (aFingerprints[i] != bFingerprints[i]) return false;
   }
   return true;
 }
 
-/// Every field except currentStreak/longestStreak — those are the two
-/// fields a check-in's streak recalculation writes, and the only ones
-/// this fingerprint must ignore for [_sameHabitListStructure] to do its
-/// job. jsonEncode gives frequencyConfig's toJson() map a stable,
-/// order-independent-enough string form without needing a deep-equals
-/// helper (FrequencyConfig has no == override).
+/// Every field except currentStreak/longestStreak/sortOrder — the first
+/// two are what a check-in's streak recalculation writes, the third is
+/// what a drag-reorder writes, and none of them are what
+/// [_sameHabitListStructure] needs to notice. jsonEncode gives
+/// frequencyConfig's toJson() map a stable, order-independent-enough
+/// string form without needing a deep-equals helper (FrequencyConfig has
+/// no == override).
 String _structuralFingerprint(Habit h) => [
   h.id,
   h.name,
@@ -109,7 +122,6 @@ String _structuralFingerprint(Habit h) => [
   jsonEncode(h.frequencyConfig.toJson()),
   h.reminderTime,
   h.description,
-  h.sortOrder,
   h.archivedAt?.toIso8601String(),
   h.updatedAt.toIso8601String(),
   h.categoryId,
