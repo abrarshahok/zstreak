@@ -446,7 +446,8 @@
 
       <h3>Habit and check-in data</h3>
       <p>
-        The habits you create and the days you mark complete are stored either:
+        The habits you create — including any category, quantity value, and
+        notes you add — and the days you mark complete are stored either:
       </p>
       <ul>
         <li>Locally on your device (guest mode, using local SQLite storage)</li>
@@ -457,7 +458,17 @@
       </ul>
       <p>
         This data is never shared with third parties and is used only to power
-        the app's own features — your streaks, your grid, your reminders.
+        the app's own features — your streaks, your levels, your grid, your
+        reminders, and your analytics.
+      </p>
+
+      <h3>Mood and energy data</h3>
+      <p>
+        If you use the optional daily mood log, your mood score, energy
+        score, and any note you add are stored the same way as your habit
+        data — locally in guest mode, or in Firestore if you have a linked
+        account — and are used only to power the app's Mood &amp;
+        Consistency analytics.
       </p>
 
       <h3>Purchase data (RevenueCat)</h3>
@@ -486,10 +497,33 @@
         include your habit content.
       </p>
 
-      <h2>Data deletion</h2>
+      <h3>Data export</h3>
       <p>
-        If you have a linked account, you can permanently delete your account
-        and all associated data at any time from
+        Settings lets you export your own habit, check-in, and mood data as a
+        CSV file or a formatted PDF report. This file is generated on your
+        device and handed to your device's native share sheet — you choose
+        where it goes (email, messaging app, cloud storage, and so on). We do
+        not receive or keep a copy of anything you export.
+      </p>
+
+      <h3>Reminders and notifications</h3>
+      <p>
+        Habit reminders and streak-risk alerts are scheduled locally on your
+        device using your device's own notification system. We do not use
+        push notifications, so no additional data is sent to us for this
+        feature.
+      </p>
+
+      <h2>Data deletion and account deactivation</h2>
+      <p>
+        If you have a linked account, <strong>Settings → Deactivate
+        Account</strong> temporarily disables sign-in access without deleting
+        any of your data — sign back in at any time to restore everything
+        exactly as it was.
+      </p>
+      <p>
+        If you have a linked account, you can also permanently delete your
+        account and all associated data at any time from
         <strong>Settings → Delete Account</strong>. This removes your Firestore
         data and your authentication record.
       </p>
