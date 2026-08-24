@@ -63,6 +63,39 @@ class HabitColorTheme {
 class AppTheme {
   AppTheme._();
 
+  // Status bar stays transparent (Flutter still draws content behind it —
+  // that's the intended edge-to-edge look for a top bar). The nav bar is
+  // opaque instead: Android 15+/16 no longer lets an app opt out of
+  // edge-to-edge, so the canvas always extends behind it regardless — an
+  // opaque bar just means it reads as a normal, solid nav bar rather than
+  // interactive content visibly running into a see-through one. Solid
+  // content still needs its own MediaQuery.padding.bottom clearance
+  // either way; this only fixes the visual look, not the layout.
+  //
+  // Exposed here (not just inline in appBarTheme below) so app.dart can
+  // apply the same style app-wide via AnnotatedRegion for screens that
+  // have no AppBar of their own (onboarding, sign-in, etc.) — an AppBar's
+  // own systemOverlayStyle only takes effect while that AppBar is mounted.
+  static const SystemUiOverlayStyle systemOverlayStyleDark =
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: AppColors.background,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: AppColors.background,
+      );
+
+  static const SystemUiOverlayStyle systemOverlayStyleLight =
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: AppColors.backgroundLight,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: AppColors.backgroundLight,
+      );
+
   static TextTheme _brandTextTheme(TextTheme base) {
     final theme = GoogleFonts.outfitTextTheme(base);
     return theme.copyWith(
@@ -214,22 +247,13 @@ class AppTheme {
         tileColor: Colors.transparent,
         iconColor: AppColors.textMuted,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        // Light icons on dark background; transparent bars so Flutter draws
-        // edge-to-edge behind the status bar and navigation bar.
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.light,
-          systemNavigationBarDividerColor: Colors.transparent,
-        ),
+        systemOverlayStyle: systemOverlayStyleDark,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.background,
@@ -360,22 +384,13 @@ class AppTheme {
         tileColor: Colors.transparent,
         iconColor: AppColors.textMutedLight,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.backgroundLight,
         foregroundColor: AppColors.textPrimaryLight,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        // Dark icons on light background; transparent bars so Flutter draws
-        // edge-to-edge behind the status bar and navigation bar.
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.light,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.dark,
-          systemNavigationBarDividerColor: Colors.transparent,
-        ),
+        systemOverlayStyle: systemOverlayStyleLight,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.backgroundLight,

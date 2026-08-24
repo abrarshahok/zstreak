@@ -1393,7 +1393,12 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
         final selected = List<String>.from(current);
         return StatefulBuilder(
           builder: (ctx, setState) => Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            margin: EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              12 + MediaQuery.of(ctx).padding.bottom,
+            ),
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             decoration: BoxDecoration(
               color: surface,
@@ -1536,7 +1541,12 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
         String selected = current;
         return StatefulBuilder(
           builder: (ctx, setState) => Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            margin: EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              12 + MediaQuery.of(ctx).padding.bottom,
+            ),
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             decoration: BoxDecoration(
               color: surface,
@@ -1751,7 +1761,12 @@ class _TextFieldSheetState extends State<_TextFieldSheet> {
       child: SingleChildScrollView(
         // Prevents RenderFlex overflow when content + keyboard exceed viewport.
         child: Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          margin: EdgeInsets.fromLTRB(
+            12,
+            0,
+            12,
+            12 + MediaQuery.of(context).padding.bottom,
+          ),
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
           decoration: BoxDecoration(
             color: surface,
@@ -1934,7 +1949,12 @@ class _AgePickerSheetState extends State<_AgePickerSheet> {
     const pickerHeight = itemHeight * visibleItems;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      margin: EdgeInsets.fromLTRB(
+        12,
+        0,
+        12,
+        12 + MediaQuery.of(context).padding.bottom,
+      ),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
       decoration: BoxDecoration(
         color: surface,

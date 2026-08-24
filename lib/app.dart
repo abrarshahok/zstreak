@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
@@ -189,16 +190,36 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
       ref.read(analyticsServiceProvider).setUserId(uid);
     });
 
-    return MaterialApp(
-      navigatorKey: ref.watch(navigatorKeyProvider),
-      title: 'ZStreak',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ref.watch(themeModeProvider),
-      home: widget.configuringWidgetId != null
-          ? WidgetConfigureScreen(widgetId: widget.configuringWidgetId!)
-          : const AuthGate(),
+    // Fallback so the opaque-nav-bar styling (see AppTheme's overlay style
+    // constants) still applies on screens with no AppBar of their own
+    // (onboarding, sign-in, etc.) — an AppBar's systemOverlayStyle only
+    // takes effect while that specific AppBar is mounted, so without this
+    // those screens fell back to the OS default (which is transparent),
+    // and the nav bar visibly flickered between opaque and see-through
+    // depending on which screen was showing.
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = switch (themeMode) {
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
+      ThemeMode.system =>
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+    };
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: isDark
+          ? AppTheme.systemOverlayStyleDark
+          : AppTheme.systemOverlayStyleLight,
+      child: MaterialApp(
+        navigatorKey: ref.watch(navigatorKeyProvider),
+        title: 'ZStreak',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
+        home: widget.configuringWidgetId != null
+            ? WidgetConfigureScreen(widgetId: widget.configuringWidgetId!)
+            : const AuthGate(),
+      ),
     );
   }
 }

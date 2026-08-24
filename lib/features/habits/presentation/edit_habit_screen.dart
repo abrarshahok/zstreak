@@ -214,7 +214,10 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                 left: 20,
                 right: 20,
                 top: 20,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+                bottom:
+                    MediaQuery.of(sheetContext).viewInsets.bottom +
+                    MediaQuery.of(sheetContext).padding.bottom +
+                    20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -355,7 +358,10 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                 left: 20,
                 right: 20,
                 top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                bottom:
+                    MediaQuery.of(ctx).viewInsets.bottom +
+                    MediaQuery.of(ctx).padding.bottom +
+                    24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

@@ -239,9 +239,16 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     if (box == null) return ContentAlign.bottom;
     final targetTop = box.localToGlobal(Offset.zero).dy;
     final targetBottom = targetTop + box.size.height;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final spaceAbove = targetTop;
-    final spaceBelow = screenHeight - targetBottom;
+    final mq = MediaQuery.of(context);
+    // Excludes the status bar / system nav bar from what counts as
+    // "available" — the raw screen height alone still had enough room on
+    // paper for a target sitting just above a 3-button nav bar, but that
+    // reserved strip isn't actually usable, so the card's "Got it" button
+    // ended up rendered behind it.
+    final usableTop = mq.padding.top;
+    final usableBottom = mq.size.height - mq.padding.bottom;
+    final spaceAbove = targetTop - usableTop;
+    final spaceBelow = usableBottom - targetBottom;
     return spaceBelow >= spaceAbove ? ContentAlign.bottom : ContentAlign.top;
   }
 
