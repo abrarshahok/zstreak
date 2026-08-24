@@ -35,3 +35,13 @@
 # debug logs) intact.
 -keep class com.android.billingclient.** { *; }
 -dontwarn com.android.billingclient.**
+
+# google_sign_in_android (v7+) is built on Credential Manager
+# (androidx.credentials + credentials-play-services-auth) and ships no
+# consumer ProGuard rules of its own for it. Credential Manager discovers
+# its Play Services provider implementation via reflection, so R8 strips
+# it in release builds only — this is Google's own documented required
+# rule for Credential Manager + R8, not an app-specific guess:
+# https://developer.android.com/training/sign-in/credential-manager
+-if class androidx.credentials.CredentialManager
+-keep class androidx.credentials.playservices.** { *; }

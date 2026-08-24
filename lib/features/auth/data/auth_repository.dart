@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'google_sign_in_config.dart';
+
 /// Thin wrapper around Firebase Auth + Google Sign-In.
 ///
 /// Sign-in paths (spec Section 2):
@@ -54,7 +56,9 @@ class AuthRepository {
   }
 
   Future<AuthCredential?> _getGoogleCredential() async {
-    await _googleSignIn.initialize();
+    await _googleSignIn.initialize(
+      serverClientId: GoogleSignInConfig.androidServerClientId,
+    );
     final GoogleSignInAccount account;
     try {
       account = await _googleSignIn.authenticate();

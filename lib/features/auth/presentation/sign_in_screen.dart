@@ -78,10 +78,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       // authErrorMessage() collapses anything non-Firebase (e.g. a raw
       // GoogleSignInException from Credential Manager — cert/config
       // mismatches surface this way) into one generic string, so the real
-      // cause needs to be logged here or it's simply gone.
-      if (kDebugMode) {
-        debugPrint('[Auth] Google sign-in failed: $e');
-      } else {
+      // cause needs to be logged here or it's simply gone. Printed
+      // unconditionally (not just kDebugMode) since Crashlytics batches
+      // and uploads silently — it never shows up in an attached `flutter
+      // run --release` session the way a plain print/logcat line does.
+      debugPrint('[Auth] Google sign-in failed: $e');
+      if (!kDebugMode) {
         FirebaseCrashlytics.instance.recordError(
           e,
           st,
