@@ -381,6 +381,14 @@ class SettingsScreen extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       await ref.read(authRepositoryProvider).signOut();
+      // Without this, the next account to sign in on this device inherits
+      // whatever name/age/gender/goals/photo were cached locally for
+      // *this* account — syncFromFirestore sees no remote profile yet for
+      // the new uid and pushes this stale local state straight into it,
+      // permanently contaminating that account's Firestore doc, not just
+      // showing wrong data for a moment. Mirrors what the guest log-out
+      // path below already does for the same reason.
+      await ref.read(userProfileProvider.notifier).reset();
     } catch (e, st) {
       if (!kDebugMode) {
         FirebaseCrashlytics.instance.recordError(e, st, reason: 'sign out');
