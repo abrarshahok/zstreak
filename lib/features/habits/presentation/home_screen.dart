@@ -107,8 +107,11 @@ class HomeScreen extends ConsumerWidget {
                 96 + MediaQuery.of(context).padding.bottom,
               ),
               sliver: habits.when(
+                // Habit count isn't known yet at this point — 3 is just a
+                // reasonable placeholder row count, same as the
+                // _isHomeDataReady skeleton below falls back to.
                 loading: () => SliverToBoxAdapter(
-                  child: _HabitListSkeleton(isDark: isDark),
+                  child: _HomeContentSkeleton(isDark: isDark, habitCount: 3),
                 ),
                 error: (error, _) =>
                     SliverToBoxAdapter(child: _HabitsLoadError(isDark: isDark)),
@@ -387,11 +390,11 @@ bool _isHomeDataReady(WidgetRef ref, List<Habit> habits) {
 // ─── Home content skeleton (mood/streak/habits still loading) ────────────────
 
 /// Mirrors the actual shape of Home's "All mode" stack — MoodCard, the
-/// Level/check-ins ring row, then one row per habit — used once the habit
-/// list itself has loaded but [_isHomeDataReady] is still waiting on mood
-/// or per-habit streak/check-in data. Shaped like the real thing rather
-/// than reusing [_HabitListSkeleton]'s generic rows so this reads as "this
-/// page, still loading" instead of a swap to an unrelated placeholder.
+/// Level/check-ins ring row, then one row per habit — used for every stage
+/// of Home still loading (the habit list itself, a transient load error,
+/// and [_isHomeDataReady] waiting on mood/streak/check-in data), so there's
+/// exactly one skeleton shape across all of them instead of a generic one
+/// that gets swapped for this more detailed one partway through.
 class _HomeContentSkeleton extends StatelessWidget {
   const _HomeContentSkeleton({
     required this.isDark,
@@ -408,6 +411,11 @@ class _HomeContentSkeleton extends StatelessWidget {
       builder: (context, colors) {
         return Column(
           children: [
+            // Same top breathing room as the real category-chip row this
+            // stack sits under — without it the mood card placeholder sat
+            // flush against the app bar instead of matching that gap.
+            const SizedBox(height: 14),
+
             // ── Mood card ────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -523,62 +531,6 @@ class _HomeContentSkeleton extends StatelessWidget {
   }
 }
 
-// ─── Habit list skeleton (loading state) ─────────────────────────────────────
-
-class _HabitListSkeleton extends StatelessWidget {
-  const _HabitListSkeleton({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return ShimmerLoading(
-      isDark: isDark,
-      builder: (context, colors) {
-        return Column(
-          children: List.generate(5, (i) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: ShimmerCard(
-                colors: colors,
-                height: 80,
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Row(
-                  children: [
-                    ShimmerCircle(size: 44, color: colors.border),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ShimmerBlock(
-                            height: 13,
-                            width: double.infinity,
-                            color: colors.border,
-                          ),
-                          const SizedBox(height: 8),
-                          ShimmerBlock(
-                            height: 10,
-                            width: 80,
-                            color: colors.border,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ShimmerCircle(size: 40, color: colors.border),
-                  ],
-                ),
-              ),
-            );
-          }),
-        );
-      },
-    );
-  }
-}
-
 // ─── Habits load error (self-healing) ────────────────────────────────────────
 //
 // A permission-denied right here immediately after a status change (e.g.
@@ -618,7 +570,7 @@ class _HabitsLoadErrorState extends ConsumerState<_HabitsLoadError> {
 
   @override
   Widget build(BuildContext context) {
-    return _HabitListSkeleton(isDark: widget.isDark);
+    return _HomeContentSkeleton(isDark: widget.isDark, habitCount: 3);
   }
 }
 
