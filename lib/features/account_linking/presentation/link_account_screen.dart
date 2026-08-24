@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/auth_error_messages.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
+import '../../../core/widgets/google_glyph.dart';
 import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
@@ -355,13 +356,20 @@ class _FlatButton extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                : Text(
-                    label,
-                    style: TextStyle(
-                      color: fgColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const GoogleGlyph(size: 20),
+                      const SizedBox(width: 10),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: fgColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
           ),
         ),

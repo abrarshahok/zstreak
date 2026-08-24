@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/google_glyph.dart';
 import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../data_export/export_format_sheet.dart';
@@ -111,13 +112,20 @@ class GuestExpiredInterstitial extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Center(
-                          child: Text(
-                            AppCopy.linkWithGoogle,
-                            style: TextStyle(
-                              color: buttonFg,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const GoogleGlyph(size: 20),
+                              const SizedBox(width: 10),
+                              Text(
+                                AppCopy.linkWithGoogle,
+                                style: TextStyle(
+                                  color: buttonFg,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),

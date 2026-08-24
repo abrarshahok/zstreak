@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
+import '../../../core/widgets/google_glyph.dart';
 import '../../../core/widgets/shimmer_loading.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../analytics/analytics_service.dart';
@@ -1494,9 +1495,16 @@ class _GuestGateSheet extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: const Text(
-                'Sign up - it\'s free',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const GoogleGlyph(size: 20),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Sign up - it\'s free',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ],
               ),
             ),
           ),

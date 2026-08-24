@@ -1,7 +1,6 @@
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +8,7 @@ import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/auth_error_messages.dart';
+import '../../../core/widgets/google_glyph.dart';
 import '../../../core/widgets/terms_privacy_notice.dart';
 import '../../analytics/analytics_service.dart';
 import '../../monetization/presentation/paywall_screen.dart';
@@ -424,7 +424,7 @@ class _GoogleButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const _GoogleGlyph(),
+                  const GoogleGlyph(),
                   const SizedBox(width: 12),
                   Text(
                     AppCopy.continueWithGoogle,
@@ -437,21 +437,6 @@ class _GoogleButton extends StatelessWidget {
                 ],
               ),
       ),
-    );
-  }
-}
-
-// ─── Google Glyph ─────────────────────────────────────────────────────────────
-
-class _GoogleGlyph extends StatelessWidget {
-  const _GoogleGlyph();
-
-  @override
-  Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/icons/google_logo.svg',
-      width: 24,
-      height: 24,
     );
   }
 }
