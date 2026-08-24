@@ -16,7 +16,19 @@ class RevenueCatService {
   Future<void> initialize() async {
     await Purchases.setLogLevel(kDebugMode ? LogLevel.debug : LogLevel.warn);
     await Purchases.configure(
-      PurchasesConfiguration(RevenueCatConfig.androidApiKey),
+      PurchasesConfiguration(RevenueCatConfig.androidApiKey)
+        // Trusted Entitlements (informational mode): asks the SDK to flag
+        // whether an entitlement it reports was actually verified against
+        // RevenueCat's servers, rather than only ever trusting whatever
+        // the on-device cache says. Doesn't block or change anything on
+        // its own — grants still go through as normal on a verification
+        // failure — hasActiveEntitlement() below just also gets a signal
+        // it can act on. Only produces a real (non-"not requested")
+        // result once Informational Mode is also turned on in the
+        // RevenueCat dashboard (Project Settings -> Entitlement
+        // Verification); until then this is a safe no-op.
+        // See https://rev.cat/trusted-entitlements.
+        ..entitlementVerificationMode = EntitlementVerificationMode.informational,
     );
   }
 
@@ -57,6 +69,25 @@ class RevenueCatService {
       final hasEntitlement = active.containsKey(
         RevenueCatConfig.premiumEntitlementId,
       );
+      // Trusted Entitlements (see initialize()) flagged this specific
+      // entitlement as not matching what RevenueCat's servers say it
+      // should be — grant still goes through (informational mode never
+      // blocks), but a tampered/rooted-device response wouldn't produce
+      // this any other way, so it's worth a signal.
+      if (hasEntitlement && !kDebugMode) {
+        final verification =
+            active[RevenueCatConfig.premiumEntitlementId]?.verification;
+        if (verification == VerificationResult.failed) {
+          FirebaseCrashlytics.instance.recordError(
+            StateError(
+              'RC entitlement "${RevenueCatConfig.premiumEntitlementId}" '
+              'present but failed Trusted Entitlements verification',
+            ),
+            StackTrace.current,
+            reason: 'RC entitlement verification failed',
+          );
+        }
+      }
       // The customer has *some* active entitlement, but not the one this
       // build expects — almost always an identifier typo/rename on the
       // RevenueCat dashboard (space, casing, etc.) rather than a real "no
