@@ -31,6 +31,10 @@ bool readHomeTourSeenFromPrefs(SharedPreferences prefs) =>
 class HomeTourKeys {
   final fabKey = GlobalKey();
   final firstHabitKey = GlobalKey();
+  final firstTemplateKey = GlobalKey();
+  final moodKey = GlobalKey();
+  final streakSummaryKey = GlobalKey();
+  final weeklyReviewKey = GlobalKey();
   final viewToggleKey = GlobalKey();
   final analyticsKey = GlobalKey();
   final archiveKey = GlobalKey();

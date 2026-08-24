@@ -73,7 +73,48 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
             "Tap here to add your first habit — that's how everything "
             'on this screen gets started.',
       ),
-      if (habits.isNotEmpty)
+      if (habits.isEmpty)
+        _step(
+          key: keys.firstTemplateKey,
+          accent: accent,
+          isDark: isDark,
+          radius: 12,
+          title: 'Or start from a template',
+          body:
+              'Tap one of these to add a common habit instantly — no '
+              'need to fill out a form.',
+        )
+      else ...[
+        _step(
+          key: keys.moodKey,
+          accent: accent,
+          isDark: isDark,
+          title: 'Log your mood',
+          body: 'A quick daily mood check-in — see it alongside your '
+              'habits over time.',
+        ),
+        _step(
+          key: keys.streakSummaryKey,
+          accent: accent,
+          isDark: isDark,
+          title: 'Level & check-ins',
+          body: 'Your level and total check-ins, earned from the streaks '
+              'you keep.',
+        ),
+        // Weekly Review only renders (Sunday evening/Monday, and not
+        // already dismissed this week) — checking its actual rendered
+        // size rather than duplicating that visibility logic here is
+        // what keeps this from spotlighting a zero-size widget on any
+        // other day.
+        if (_isRendered(keys.weeklyReviewKey))
+          _step(
+            key: keys.weeklyReviewKey,
+            accent: accent,
+            isDark: isDark,
+            title: 'Weekly review',
+            body: 'A recap of your week — check-ins, your best habit, and '
+                'what needs work.',
+          ),
         _step(
           key: keys.firstHabitKey,
           accent: accent,
@@ -83,10 +124,17 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
               'Tap a habit to check it off for today, or see its full '
               'history and streak.',
         ),
+      ],
+      // These four all live in the top-right of the app bar — the same
+      // corner the Skip button defaults to, which sat right on top of
+      // (or immediately next to) whichever one was highlighted. Moved
+      // just for these steps rather than changing the global default,
+      // since every other step's target isn't anywhere near that corner.
       _step(
         key: keys.viewToggleKey,
         accent: accent,
         isDark: isDark,
+        alignSkip: Alignment.bottomRight,
         title: 'Switch views',
         body: 'Toggle between list and grid layout for your habits.',
       ),
@@ -94,6 +142,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.analyticsKey,
         accent: accent,
         isDark: isDark,
+        alignSkip: Alignment.bottomRight,
         title: 'Analytics',
         body: 'See your consistency trends and progress over time.',
       ),
@@ -101,6 +150,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.archiveKey,
         accent: accent,
         isDark: isDark,
+        alignSkip: Alignment.bottomRight,
         title: 'Archive',
         body: 'Habits you pause instead of delete end up here.',
       ),
@@ -108,6 +158,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.settingsKey,
         accent: accent,
         isDark: isDark,
+        alignSkip: Alignment.bottomRight,
         title: 'Settings',
         body: 'Manage your account, theme, and Pro subscription.',
       ),
@@ -142,12 +193,14 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     required String title,
     required String body,
     double radius = 14,
+    AlignmentGeometry? alignSkip,
   }) {
     return TargetFocus(
       keyTarget: key,
       shape: ShapeLightFocus.RRect,
       radius: radius,
       color: accent,
+      alignSkip: alignSkip,
       contents: [
         TargetContent(
           align: _alignFor(key),
@@ -163,21 +216,33 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     );
   }
 
+  /// Whether [key]'s target actually has visible size right now — used to
+  /// skip a step for a widget that conditionally collapses to
+  /// `SizedBox.shrink()` (e.g. WeeklyReviewCard) instead of duplicating
+  /// that widget's own visibility rules here.
+  bool _isRendered(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    return box != null && box.hasSize && box.size.height > 0;
+  }
+
   /// Picks which side of the target to show the card on based on the
   /// target's *actual* position on screen, rather than a hardcoded guess
-  /// per step. A hardcoded `ContentAlign.bottom` on a target that's
-  /// already in the lower half of the screen (e.g. the header icons on a
-  /// short device, or the FAB) pushed the card past the bottom edge —
-  /// this keeps it on whichever side actually has room.
+  /// per step. Compares the real space available above vs. below the
+  /// target and picks whichever side has more — a fixed "center past 60%
+  /// of screen height" threshold used to pick "bottom" for any target
+  /// still above that cutoff, even when the sliver of room actually left
+  /// below it (e.g. a habit card sitting mid-screen, with content above
+  /// it pushing it down) wasn't enough for the card's own height, so it
+  /// ran off the bottom edge anyway.
   ContentAlign _alignFor(GlobalKey key) {
     final box = key.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return ContentAlign.bottom;
     final targetTop = box.localToGlobal(Offset.zero).dy;
-    final targetCenterY = targetTop + box.size.height / 2;
+    final targetBottom = targetTop + box.size.height;
     final screenHeight = MediaQuery.of(context).size.height;
-    return targetCenterY > screenHeight * 0.6
-        ? ContentAlign.top
-        : ContentAlign.bottom;
+    final spaceAbove = targetTop;
+    final spaceBelow = screenHeight - targetBottom;
+    return spaceBelow >= spaceAbove ? ContentAlign.bottom : ContentAlign.top;
   }
 
   @override

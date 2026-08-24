@@ -115,7 +115,10 @@ class HomeScreen extends ConsumerWidget {
                 data: (list) {
                   if (list.isEmpty) {
                     return SliverToBoxAdapter(
-                      child: _EmptyState(isDark: isDark),
+                      child: _EmptyState(
+                        isDark: isDark,
+                        firstTemplateKey: tourKeys.firstTemplateKey,
+                      ),
                     );
                   }
 
@@ -213,15 +216,21 @@ class HomeScreen extends ConsumerWidget {
                   return SliverMainAxisGroup(
                     slivers: [
                       if (categoryChips != null) categoryChips,
-                      SliverToBoxAdapter(child: MoodCard(isDark: isDark)),
+                      SliverToBoxAdapter(
+                        child: MoodCard(key: tourKeys.moodKey, isDark: isDark),
+                      ),
                       SliverToBoxAdapter(
                         child: _StreakSummaryBar(
+                          key: tourKeys.streakSummaryKey,
                           habits: visibleList,
                           isDark: isDark,
                         ),
                       ),
                       SliverToBoxAdapter(
-                        child: WeeklyReviewCard(habits: visibleList),
+                        child: WeeklyReviewCard(
+                          key: tourKeys.weeklyReviewKey,
+                          habits: visibleList,
+                        ),
                       ),
                       if (viewMode == _ViewMode.list)
                         SliverToBoxAdapter(
@@ -1787,7 +1796,11 @@ class _IconBtn extends StatelessWidget {
 // ─── Streak Summary Bar ───────────────────────────────────────────────────────
 
 class _StreakSummaryBar extends ConsumerWidget {
-  const _StreakSummaryBar({required this.habits, required this.isDark});
+  const _StreakSummaryBar({
+    super.key,
+    required this.habits,
+    required this.isDark,
+  });
 
   final List<Habit> habits;
   final bool isDark;
@@ -2188,9 +2201,10 @@ const _kQuickStarts = [
 ];
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.isDark});
+  const _EmptyState({required this.isDark, this.firstTemplateKey});
 
   final bool isDark;
+  final GlobalKey? firstTemplateKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2252,6 +2266,7 @@ class _EmptyState extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child:
                   GestureDetector(
+                        key: index == 0 ? firstTemplateKey : null,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => EditHabitScreen(
