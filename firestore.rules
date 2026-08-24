@@ -57,11 +57,11 @@ service cloud.firestore {
     // This does NOT cap the *number* of habit/check-in documents a user
     // can create — Firestore security rules have no way to count sibling
     // documents in a collection without a separately maintained counter
-    // field, kept in sync by a Cloud Function trigger (the `functions/`
-    // project has `deleteAccount` today, but no such counter/trigger yet)
-    // — a real follow-up if per-user document-count limits are wanted,
-    // not something addable in rules alone. Field-size caps at least
-    // bound the cost of any *single* write.
+    // field, kept in sync by a Cloud Function trigger (none exist in the
+    // `functions/` project yet) — a real follow-up if per-user
+    // document-count limits are wanted, not something addable in rules
+    // alone. Field-size caps at least bound the cost of any *single*
+    // write.
     function isValidHabitWrite(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100
         && data.emoji is string && data.emoji.size() <= 32

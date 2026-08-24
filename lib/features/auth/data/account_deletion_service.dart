@@ -1,25 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Deletes the current user's account entirely on the client side.
+/// Deletes a guest (anonymous) account's data on the client side.
 ///
-/// Works on the Firebase Spark (free) plan — no Cloud Functions required.
-///
-/// Deletion order:
-///   1. All check-in subcollection documents (paginated, 400 per batch)
-///   2. All habit documents (paginated, 400 per batch)
-///   3. The top-level /users/{uid} document
-///   4. The Firebase Auth user record
-///
-/// If the app crashes between steps, the orphaned Firestore documents are
-/// inaccessible to anyone — the [isOwner] security rule requires a valid
-/// Firebase uid that no longer exists after step 4. They will not incur
-/// read costs because no client can query them.
-///
-/// Firebase requires a recent sign-in before [User.delete] succeeds. If the
-/// session is stale, [FirebaseAuthException] with code `requires-recent-login`
-/// is thrown. The caller (Settings screen) must catch this and prompt the user
-/// to re-authenticate before retrying.
+/// Signed-in accounts don't use this — Settings offers "Deactivate
+/// Account" instead (see `_confirmDeactivateAccount` in settings_screen.dart),
+/// which hides data via Firestore rules rather than deleting it.
 class AccountDeletionService {
   AccountDeletionService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _firestore = firestore ?? FirebaseFirestore.instance,
@@ -85,56 +71,6 @@ class AccountDeletionService {
   Future<void> deleteGuestAuthRecord() async {
     final user = _auth.currentUser;
     if (user == null) return; // already deleted or signed out
-    await user.delete();
-  }
-
-  /// Convenience wrapper: deletes Firestore data + Auth record in one call.
-  /// Use only when there are no active Firestore listeners (e.g. from a
-  /// background isolate or after navigation has already cleared the widget tree).
-  Future<void> deleteGuestAccount() async {
-    await deleteGuestFirestoreData();
-    await deleteGuestAuthRecord();
-  }
-
-  Future<void> deleteAccount() async {
-    final user = _auth.currentUser;
-    if (user == null) throw StateError('No signed-in user to delete.');
-
-    final uid = user.uid;
-    final habitsRef = _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('habits');
-
-    // ── Step 1: delete all check-in subcollections ──────────────────────────
-    // We must page through habits first, then delete each habit's check-ins.
-    // Firestore does not cascade-delete subcollections automatically.
-    QuerySnapshot<Map<String, dynamic>> habitSnap;
-    DocumentSnapshot? lastHabitDoc;
-
-    do {
-      var query = habitsRef.limit(_batchSize);
-      if (lastHabitDoc != null) {
-        query = query.startAfterDocument(lastHabitDoc);
-      }
-      habitSnap = await query.get();
-
-      for (final habitDoc in habitSnap.docs) {
-        await _deleteCollection(habitDoc.reference.collection('check_ins'));
-      }
-
-      lastHabitDoc = habitSnap.docs.isNotEmpty ? habitSnap.docs.last : null;
-    } while (habitSnap.docs.length == _batchSize);
-
-    // ── Step 2: delete all habit documents ─────────────────────────────────
-    await _deleteCollection(habitsRef);
-
-    // ── Step 3: delete the top-level user document ──────────────────────────
-    await _firestore.collection('users').doc(uid).delete();
-
-    // ── Step 4: delete the Firebase Auth record ─────────────────────────────
-    // Throws FirebaseAuthException(code: 'requires-recent-login') if the
-    // session is older than ~5 minutes. The Settings screen must handle this.
     await user.delete();
   }
 
