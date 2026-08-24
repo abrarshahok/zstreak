@@ -51,7 +51,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.fabKey,
         accent: accent,
         isDark: isDark,
-        align: ContentAlign.top,
         radius: 24,
         title: 'Add a habit',
         body:
@@ -63,7 +62,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
           key: keys.firstHabitKey,
           accent: accent,
           isDark: isDark,
-          align: ContentAlign.bottom,
           title: 'Your habits',
           body:
               'Tap a habit to check it off for today, or see its full '
@@ -73,7 +71,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.viewToggleKey,
         accent: accent,
         isDark: isDark,
-        align: ContentAlign.bottom,
         title: 'Switch views',
         body: 'Toggle between list and grid layout for your habits.',
       ),
@@ -81,7 +78,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.analyticsKey,
         accent: accent,
         isDark: isDark,
-        align: ContentAlign.bottom,
         title: 'Analytics',
         body: 'See your consistency trends and progress over time.',
       ),
@@ -89,7 +85,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.archiveKey,
         accent: accent,
         isDark: isDark,
-        align: ContentAlign.bottom,
         title: 'Archive',
         body: 'Habits you pause instead of delete end up here.',
       ),
@@ -97,7 +92,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         key: keys.settingsKey,
         accent: accent,
         isDark: isDark,
-        align: ContentAlign.bottom,
         title: 'Settings',
         body: 'Manage your account, theme, and Pro subscription.',
       ),
@@ -129,7 +123,6 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
     required GlobalKey key,
     required Color accent,
     required bool isDark,
-    required ContentAlign align,
     required String title,
     required String body,
     double radius = 14,
@@ -141,7 +134,7 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
       color: accent,
       contents: [
         TargetContent(
-          align: align,
+          align: _alignFor(key),
           builder: (context, controller) => _TourCard(
             title: title,
             body: body,
@@ -152,6 +145,23 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
         ),
       ],
     );
+  }
+
+  /// Picks which side of the target to show the card on based on the
+  /// target's *actual* position on screen, rather than a hardcoded guess
+  /// per step. A hardcoded `ContentAlign.bottom` on a target that's
+  /// already in the lower half of the screen (e.g. the header icons on a
+  /// short device, or the FAB) pushed the card past the bottom edge —
+  /// this keeps it on whichever side actually has room.
+  ContentAlign _alignFor(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return ContentAlign.bottom;
+    final targetTop = box.localToGlobal(Offset.zero).dy;
+    final targetCenterY = targetTop + box.size.height / 2;
+    final screenHeight = MediaQuery.of(context).size.height;
+    return targetCenterY > screenHeight * 0.6
+        ? ContentAlign.top
+        : ContentAlign.bottom;
   }
 
   @override
@@ -209,22 +219,28 @@ class _TourCard extends StatelessWidget {
             style: TextStyle(color: textMuted, fontSize: 13, height: 1.4),
           ),
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: ElevatedButton(
-              onPressed: onNext,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: isDark ? Colors.black : Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          // A fixed height here clipped the label at larger system font
+          // scales (the button's intrinsic content — text + padding —
+          // could exceed it). minHeight keeps the tap target a reasonable
+          // size without ever cutting the text off.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onNext,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accent,
+                  foregroundColor: isDark ? Colors.black : Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-              ),
-              child: const Text(
-                'Got it',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                child: const Text(
+                  'Got it',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
               ),
             ),
           ),
