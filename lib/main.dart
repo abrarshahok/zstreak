@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -27,14 +28,57 @@ Future<void> main() async {
   // between.
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  // Draw Flutter content behind the status bar and navigation bar so the app
-  // feels truly full-screen on physical devices. Each screen controls its own
-  // overlay icon brightness via SystemUiOverlayStyle (set in AppTheme or per
-  // screen). Without this, Android clips the Flutter canvas at the system bar
-  // boundaries, causing the "overlapping" appearance on API 29+ devices.
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // These five calls are mutually independent — none reads another's
+  // result — so they run concurrently instead of paying for each one's
+  // latency in sequence on the critical path to the first frame.
+  final results = await Future.wait<Object?>([
+    // Draw Flutter content behind the status bar and navigation bar so the
+    // app feels truly full-screen on physical devices. Each screen controls
+    // its own overlay icon brightness via SystemUiOverlayStyle (set in
+    // AppTheme or per screen). Without this, Android clips the Flutter
+    // canvas at the system bar boundaries, causing the "overlapping"
+    // appearance on API 29+ devices.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
+    Firebase.initializeApp(),
+    SharedPreferences.getInstance(),
+    // Lets the widget's check-in tap run this callback in a headless
+    // isolate without opening the app (spec Section 2/12).
+    HomeWidget.registerInteractivityCallback(widgetInteractivityCallback),
+    // Resolved *before* runApp() rather than reactively via setState once
+    // the app is already showing — MaterialApp's Navigator only ever
+    // consults `home` once, to build its initial '/' route, when it first
+    // mounts. Changing `home` on a later rebuild (which is all a
+    // post-launch setState could do) doesn't retroactively replace that
+    // already-built route, so the widget-configure screen never actually
+    // appeared; the app just sat on its normal AuthGate route while
+    // home_widget's pending result stayed unresolved. Deciding this up
+    // front means the very first build already has the right answer.
+    HomeWidget.initiallyLaunchedFromHomeWidgetConfigure(),
+  ]);
+  final prefs = results[2] as SharedPreferences;
+  final configureIdString = results[4] as String?;
+  final configuringWidgetId = configureIdString == null
+      ? null
+      : int.tryParse(configureIdString);
 
-  await Firebase.initializeApp();
+  // App Check attaches its attestation token to every Firebase request from
+  // here on, so it must be activated before anything below (Firestore,
+  // Crashlytics) — and before Firebase.initializeApp() resolves it can't run
+  // at all, so it belongs after the Future.wait above, not inside it.
+  //
+  // NOT yet enforced server-side (see Firebase Console -> App Check) — this
+  // app is already live, and existing installs won't have this SDK until
+  // they update. Ship this unenforced first, watch the console's
+  // verified-vs-rejected metrics as old versions phase out, and only then
+  // flip Firestore enforcement on. Local/emulator runs also need the debug
+  // token this prints on first launch registered under Console -> App Check
+  // -> Manage debug tokens, or App Check calls will simply fail closed.
+  await FirebaseAppCheck.instance.activate(
+    providerAndroid: const AndroidPlayIntegrityProvider(),
+    // Falls back to Device Check on iOS <14/macOS <14 instead of failing
+    // outright, since App Attest alone requires iOS 14+/macOS 14+.
+    providerApple: const AppleAppAttestWithDeviceCheckFallbackProvider(),
+  );
 
   // Explicit for clarity — on for signed-in users so check-ins stay
   // instant and reliable offline (spec Section 2); mobile defaults to on,
@@ -49,27 +93,6 @@ Future<void> main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
-
-  final prefs = await SharedPreferences.getInstance();
-
-  // Lets the widget's check-in tap run this callback in a headless
-  // isolate without opening the app (spec Section 2/12).
-  await HomeWidget.registerInteractivityCallback(widgetInteractivityCallback);
-
-  // Resolved *before* runApp() rather than reactively via setState once the
-  // app is already showing — MaterialApp's Navigator only ever consults
-  // `home` once, to build its initial '/' route, when it first mounts.
-  // Changing `home` on a later rebuild (which is all a post-launch setState
-  // could do) doesn't retroactively replace that already-built route, so
-  // the widget-configure screen never actually appeared; the app just sat
-  // on its normal AuthGate route while home_widget's pending result stayed
-  // unresolved. Deciding this up front means the very first build already
-  // has the right answer.
-  final configureIdString =
-      await HomeWidget.initiallyLaunchedFromHomeWidgetConfigure();
-  final configuringWidgetId = configureIdString == null
-      ? null
-      : int.tryParse(configureIdString);
 
   runApp(
     ProviderScope(

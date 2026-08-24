@@ -15,7 +15,15 @@
     <application
         android:label="ZStreak"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- Default (true, unset) lets adb backup / OS auto-backup pull the
+             local drift SQLite DB and SharedPreferences off a rooted or
+             debuggable device. Signed-in users' real data lives in
+             Firestore regardless (unaffected either way); this only trades
+             away restoring a guest's local-only data on reinstall, which
+             the app already treats as ephemeral (nudges guests to sign in
+             for anything meant to survive a reinstall). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

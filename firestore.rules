@@ -44,6 +44,25 @@ service cloud.firestore {
             || request.time < doc.reactivationDeadline);
     }
 
+    // Backstops against unbounded document creation — rules can only see a
+    // single document at a time, never "how many siblings already exist",
+    // so these counts are maintained by Cloud Functions triggers
+    // (onHabitCreated/onHabitDeleted, onCategoryCreated/onCategoryDeleted
+    // in functions/src/index.ts) rather than computed here. Caps are
+    // deliberately generous — this is an abuse backstop against a direct,
+    // non-UI API write spamming documents, not the product's free-tier
+    // limit (3 habits, AppConfig.freeTierHabitLimit), which is enforced
+    // client-side only; a real user should never come close to these.
+    function habitCountBelow(uid) {
+      return get(/databases/$(database)/documents/users/$(uid))
+        .data.get('habitCount', 0) < 1000;
+    }
+
+    function categoryCountBelow(uid) {
+      return get(/databases/$(database)/documents/users/$(uid))
+        .data.get('categoryCount', 0) < 300;
+    }
+
     // Bounds on individual habit doc fields — a signed-in account is free
     // to create (one tap, no payment) and the app's own `.limit(50)`
     // habit-list query and 60/200-char name/description text fields are
@@ -54,14 +73,11 @@ service cloud.firestore {
     // the client's own caps (60/200 chars) specifically so no legitimate
     // write is ever rejected.
     //
-    // This does NOT cap the *number* of habit/check-in documents a user
-    // can create — Firestore security rules have no way to count sibling
-    // documents in a collection without a separately maintained counter
-    // field, kept in sync by a Cloud Function trigger (none exist in the
-    // `functions/` project yet) — a real follow-up if per-user
-    // document-count limits are wanted, not something addable in rules
-    // alone. Field-size caps at least bound the cost of any *single*
-    // write.
+    // Sibling *count* (as opposed to a single doc's field sizes) is capped
+    // separately by habitCountBelow()/categoryCountBelow() above, and
+    // check_ins/mood_entries by the {date}-format check on their own doc
+    // IDs — see those functions and match blocks for why each collection
+    // needed a different approach.
     function isValidHabitWrite(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100
         && data.emoji is string && data.emoji.size() <= 32
@@ -131,26 +147,44 @@ service cloud.firestore {
 
       match /habits/{habitId} {
         allow read, delete: if isOwner(uid) && isActive(uid);
-        allow create, update: if isOwner(uid) && isActive(uid)
+        allow create: if isOwner(uid) && isActive(uid)
+          && isValidHabitWrite(request.resource.data)
+          && habitCountBelow(uid);
+        allow update: if isOwner(uid) && isActive(uid)
           && isValidHabitWrite(request.resource.data);
 
+        // {date} is a client-chosen doc ID (see local_date.dart's
+        // localDateString) with nothing else constraining it — without
+        // this format check, a non-anonymous account could write
+        // unlimited garbage-ID documents here directly via the API,
+        // bypassing the app entirely. A real user's check-ins are already
+        // naturally bounded to one per calendar day, so this closes the
+        // gap without a maintained counter (which would either cap
+        // legitimate years-long history or need to be implausibly high
+        // to avoid ever blocking a real long-time user).
         match /check_ins/{date} {
           allow read, delete: if isOwner(uid) && isActive(uid);
           allow create, update: if isOwner(uid) && isActive(uid)
-            && isValidCheckInWrite(request.resource.data);
+            && isValidCheckInWrite(request.resource.data)
+            && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
         }
       }
 
       match /categories/{categoryId} {
         allow read, delete: if isOwner(uid) && isActive(uid);
-        allow create, update: if isOwner(uid) && isActive(uid)
+        allow create: if isOwner(uid) && isActive(uid)
+          && isValidCategoryWrite(request.resource.data)
+          && categoryCountBelow(uid);
+        allow update: if isOwner(uid) && isActive(uid)
           && isValidCategoryWrite(request.resource.data);
       }
 
+      // Same {date}-format reasoning as check_ins above.
       match /mood_entries/{date} {
         allow read, delete: if isOwner(uid) && isActive(uid);
         allow create, update: if isOwner(uid) && isActive(uid)
-          && isValidMoodWrite(request.resource.data);
+          && isValidMoodWrite(request.resource.data)
+          && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
       }
     }
   }
