@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "245868538464-3p1dob82514iosengjls6pum1pmqvfea.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zstreak.app",
+            "certificate_hash": "3a4ccddca3f330d42275efa5de9188b4101dee6b"
+          }
+        },
+        {
           "client_id": "245868538464-76v0a1o5mo8fipvmeikmg5pre68p217c.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

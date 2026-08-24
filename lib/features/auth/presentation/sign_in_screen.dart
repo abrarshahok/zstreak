@@ -1,3 +1,5 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -72,7 +74,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         // Returning user — go straight to root (AuthGate handles routing).
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
-    } catch (e) {
+    } catch (e, st) {
+      // authErrorMessage() collapses anything non-Firebase (e.g. a raw
+      // GoogleSignInException from Credential Manager — cert/config
+      // mismatches surface this way) into one generic string, so the real
+      // cause needs to be logged here or it's simply gone.
+      if (kDebugMode) {
+        debugPrint('[Auth] Google sign-in failed: $e');
+      } else {
+        FirebaseCrashlytics.instance.recordError(
+          e,
+          st,
+          reason: 'Google sign-in failed',
+        );
+      }
       _showError(authErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isBusy = false);

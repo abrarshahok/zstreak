@@ -107,7 +107,12 @@ class _LinkAccountScreenState extends ConsumerState<LinkAccountScreen> {
     if (!mounted) return;
     if (outcome.archivedDueToLimit > 0) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => MergeSummaryScreen(outcome: outcome)),
+        MaterialPageRoute(
+          builder: (_) => MergeSummaryScreen(
+            outcome: outcome,
+            thenPaywall: widget.thenPaywall,
+          ),
+        ),
       );
     } else {
       AppSnackBar.show(

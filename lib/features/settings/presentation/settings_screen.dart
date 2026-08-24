@@ -39,6 +39,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).valueOrNull;
     final isGuest = user?.isAnonymous ?? true;
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = isDark
         ? AppColors.textPrimary
@@ -227,22 +228,43 @@ class SettingsScreen extends ConsumerWidget {
                     isDark: isDark,
                     children: [
                       _SettingsTile(
-                        icon: Icons.bolt_rounded,
-                        label: 'Unlock the full grind',
+                        icon: isPro
+                            ? Icons.workspace_premium_rounded
+                            : Icons.bolt_rounded,
+                        label: isPro ? "You're Pro" : 'Unlock the full grind',
+                        subtitle: isPro
+                            ? 'Thanks for supporting ZStreak'
+                            : null,
                         accent: AppColors.premiumGold,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
                         onTap: () => navigateToPaywall(context, ref),
                       ),
-                      _Divider(isDark: isDark),
-                      _SettingsTile(
-                        icon: Icons.restore_rounded,
-                        label: AppCopy.paywallRestorePurchases,
-                        accent: AppColors.premiumGold,
-                        textPrimary: textPrimary,
-                        textMuted: textMuted,
-                        onTap: () => _restorePurchases(context, ref),
-                      ),
+                      if (isPro) ...[
+                        // Play Billing gives apps no in-app cancellation
+                        // API — Play policy requires a clear path to
+                        // cancel regardless, so this deep-links straight
+                        // to Play's own subscription management page
+                        // instead. (A no-op for lifetime purchasers, since
+                        // there's no active subscription for Play to list
+                        // there — nothing to cancel either way.)
+                        _Divider(isDark: isDark),
+                        _SettingsTile(
+                          icon: Icons.settings_outlined,
+                          label: 'Manage subscription',
+                          subtitle: 'Opens Google Play',
+                          accent: AppColors.premiumGold,
+                          textPrimary: textPrimary,
+                          textMuted: textMuted,
+                          onTap: () => launchUrl(
+                            Uri.parse(
+                              'https://play.google.com/store/account/subscriptions'
+                              '?package=com.zstreak.app',
+                            ),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                        ),
+                      ],
                       _Divider(isDark: isDark),
                       _SettingsTile(
                         icon: Icons.widgets_outlined,
@@ -550,52 +572,6 @@ class SettingsScreen extends ConsumerWidget {
     }
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  Future<void> _restorePurchases(BuildContext context, WidgetRef ref) async {
-    // No loading state on this tile (unlike _SaveButton elsewhere in this
-    // file) and no error handling at all — a slow or failed platform
-    // call used to look identical to "nothing happened". This gives
-    // in-flight feedback without needing to thread a busy flag through
-    // this ConsumerWidget, and now actually reports failure distinctly
-    // from "no purchase found".
-    AppSnackBar.show(context, 'Restoring purchases…', type: SnackBarType.info);
-    try {
-      // Waits for RevenueCat's own identity (Purchases.logIn) to have
-      // caught up with the current Firebase uid first — otherwise this
-      // can look up the wrong customer's purchase history entirely if it
-      // runs in the same window as a sign-in/account link. See
-      // revenueCatIdentitySyncProvider's doc comment.
-      await ref.read(revenueCatIdentitySyncProvider.future);
-      await ref.read(revenueCatServiceProvider).restorePurchases();
-      // Missing here previously (present in the paywall's own _restore) —
-      // without it, the entitlement check below could read back the
-      // FutureProvider's cached pre-restore value instead of a fresh one.
-      ref.invalidate(hasActiveEntitlementProvider);
-      final isPremium = await ref.read(hasActiveEntitlementProvider.future);
-      if (!context.mounted) return;
-      AppSnackBar.show(
-        context,
-        isPremium ? 'Restored.' : 'No previous purchase found.',
-        type: isPremium ? SnackBarType.success : SnackBarType.warning,
-      );
-    } catch (e, st) {
-      if (!kDebugMode) {
-        FirebaseCrashlytics.instance.recordError(
-          e,
-          st,
-          reason: 'restore purchases',
-        );
-      } else {
-        debugPrint('[Settings] restorePurchases failed: $e');
-      }
-      if (!context.mounted) return;
-      AppSnackBar.show(
-        context,
-        "Couldn't restore purchases. Try again.",
-        type: SnackBarType.error,
-      );
-    }
   }
 
   Future<void> _addWidget(BuildContext context, WidgetRef ref) async {

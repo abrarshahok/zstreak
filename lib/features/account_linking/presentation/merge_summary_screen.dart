@@ -3,15 +3,27 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../monetization/presentation/paywall_screen.dart';
 import '../data/migration_service.dart';
 
 /// Shown only when a merge pushed the combined habit count over the
 /// free-tier limit — nothing was dropped, but some habits landed archived.
 /// Flat design, theme-aware.
 class MergeSummaryScreen extends StatelessWidget {
-  const MergeSummaryScreen({super.key, required this.outcome});
+  const MergeSummaryScreen({
+    super.key,
+    required this.outcome,
+    this.thenPaywall = false,
+  });
 
   final MigrationOutcome outcome;
+
+  /// When `true`, "Got it" continues on to [PaywallScreen] instead of
+  /// popping to root — otherwise a guest whose merge happened to archive
+  /// habits (routed here instead of straight back to the paywall) would
+  /// lose the purchase they came here to make and have to go find the
+  /// paywall again themselves.
+  final bool thenPaywall;
 
   @override
   Widget build(BuildContext context) {
@@ -142,9 +154,15 @@ class MergeSummaryScreen extends StatelessWidget {
 
                 // ── CTA — flat, no glow ───────────────────────────────────
                 GestureDetector(
-                      onTap: () => Navigator.of(
-                        context,
-                      ).popUntil((route) => route.isFirst),
+                      onTap: () => thenPaywall
+                          ? Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => const PaywallScreen(),
+                              ),
+                            )
+                          : Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst),
                       child: Container(
                         height: 54,
                         decoration: BoxDecoration(

@@ -54,7 +54,27 @@ class RevenueCatService {
           '[RC] checking for: ${RevenueCatConfig.premiumEntitlementId}',
         );
       }
-      return active.containsKey(RevenueCatConfig.premiumEntitlementId);
+      final hasEntitlement = active.containsKey(
+        RevenueCatConfig.premiumEntitlementId,
+      );
+      // The customer has *some* active entitlement, but not the one this
+      // build expects — almost always an identifier typo/rename on the
+      // RevenueCat dashboard (space, casing, etc.) rather than a real "no
+      // purchase" case. That would otherwise look identical to a free user
+      // and go unnoticed for every customer, so flag it loudly instead of
+      // just returning false.
+      if (!hasEntitlement && active.isNotEmpty && !kDebugMode) {
+        FirebaseCrashlytics.instance.recordError(
+          StateError(
+            'Active RC entitlement(s) ${active.keys.toList()} present but '
+            'none match expected id '
+            '"${RevenueCatConfig.premiumEntitlementId}"',
+          ),
+          StackTrace.current,
+          reason: 'RC entitlement id mismatch',
+        );
+      }
+      return hasEntitlement;
     } catch (e, st) {
       // Fail closed — never grant premium features on a lookup error.
       if (!kDebugMode) {

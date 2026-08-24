@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
@@ -11,6 +12,7 @@ import '../../../core/widgets/shimmer_loading.dart';
 import '../../account_linking/presentation/link_account_screen.dart';
 import '../../analytics/analytics_service.dart';
 import '../../auth/application/auth_providers.dart';
+import '../../auth/presentation/sign_in_screen.dart';
 import '../application/entitlement_providers.dart';
 
 // ─── Offerings provider ───────────────────────────────────────────────────────
@@ -95,6 +97,17 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   }
 
   Future<void> _purchase(Package package) async {
+    final isGuest =
+        ref.read(authRepositoryProvider).currentUser?.isAnonymous ?? false;
+    if (isGuest) {
+      // Guests can browse pricing freely, but committing to a purchase
+      // anonymously risks losing it on a reinstall/device switch and
+      // complicates RevenueCat identity down the line — so the sign-up
+      // gate fires here, at the moment of intent, rather than blocking
+      // the paywall itself from even being viewed.
+      await showGuestGateSheet(context);
+      return;
+    }
     setState(() => _isBusy = true);
     try {
       // Without this, a purchase started right after a sign-in/account
@@ -145,7 +158,10 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       ref.invalidate(hasActiveEntitlementProvider);
       final isPremium = await ref.read(hasActiveEntitlementProvider.future);
       if (!mounted) return;
-      _showMessage(isPremium ? 'Restored ✅' : 'No previous purchase found.');
+      _showMessage(
+        isPremium ? 'Restored ✅' : 'No previous purchase found.',
+        type: isPremium ? SnackBarType.success : SnackBarType.warning,
+      );
     } catch (_) {
       _showMessage(AppCopy.errorGeneric);
     } finally {
@@ -200,9 +216,9 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     }
   }
 
-  void _showMessage(String message) {
+  void _showMessage(String message, {SnackBarType type = SnackBarType.error}) {
     if (!mounted) return;
-    AppSnackBar.show(context, message, type: SnackBarType.error);
+    AppSnackBar.show(context, message, type: type);
   }
 
   @override
@@ -218,6 +234,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     final borderColor = isDark ? AppColors.border : AppColors.borderLight;
     final isGuest =
         ref.watch(authRepositoryProvider).currentUser?.isAnonymous ?? false;
+    final isPro = ref.watch(hasActiveEntitlementProvider).valueOrNull ?? false;
 
     final offeringsAsync = ref.watch(_offeringsProvider);
 
@@ -238,7 +255,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'Go Pro',
+          isPro ? 'Pro' : 'Go Pro',
           style: TextStyle(
             color: textPrimary,
             fontWeight: FontWeight.w700,
@@ -273,6 +290,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                       child: _HeroSection(
                         isDark: isDark,
+                        isPro: isPro,
                         accent: accent,
                         textPrimary: textPrimary,
                         textMuted: textMuted,
@@ -306,8 +324,9 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                       ),
                     ),
 
-                  // Package selector
-                  if (packages.isNotEmpty)
+                  // Package selector — nothing to select once already Pro,
+                  // and there's no purchase button below for it to drive.
+                  if (packages.isNotEmpty && !isPro)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -367,6 +386,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
                   packages: packages,
                   selectedIndex: effectiveIndex,
                   isBusy: _isBusy,
+                  isPro: isPro,
                   isDark: isDark,
                   accent: accent,
                   textPrimary: textPrimary,
@@ -492,6 +512,7 @@ class _ErrorBody extends StatelessWidget {
 class _HeroSection extends StatelessWidget {
   const _HeroSection({
     required this.isDark,
+    required this.isPro,
     required this.accent,
     required this.textPrimary,
     required this.textMuted,
@@ -499,6 +520,7 @@ class _HeroSection extends StatelessWidget {
     required this.borderColor,
   });
   final bool isDark;
+  final bool isPro;
   final Color accent;
   final Color textPrimary;
   final Color textMuted;
@@ -533,7 +555,7 @@ class _HeroSection extends StatelessWidget {
         const SizedBox(height: 16),
         // Headline
         Text(
-          AppCopy.paywallHeadline,
+          isPro ? "You're in the full grind." : AppCopy.paywallHeadline,
           style: Theme.of(context).textTheme.displaySmall?.copyWith(
             color: textPrimary,
             fontWeight: FontWeight.w800,
@@ -544,7 +566,9 @@ class _HeroSection extends StatelessWidget {
         const SizedBox(height: 10),
         // Sub-headline
         Text(
-          'Everything you need to build habits that actually stick - unlimited, synced, and always with you.',
+          isPro
+              ? "Everything's unlocked - unlimited, synced, and always with you."
+              : 'Everything you need to build habits that actually stick - unlimited, synced, and always with you.',
           style: TextStyle(color: textMuted, fontSize: 14, height: 1.5),
         ).animate().fadeIn(delay: 100.ms),
       ],
@@ -1058,6 +1082,7 @@ class _StickyCta extends StatelessWidget {
     required this.packages,
     required this.selectedIndex,
     required this.isBusy,
+    required this.isPro,
     required this.isDark,
     required this.accent,
     required this.textPrimary,
@@ -1071,6 +1096,7 @@ class _StickyCta extends StatelessWidget {
   final List<Package> packages;
   final int selectedIndex;
   final bool isBusy;
+  final bool isPro;
   final bool isDark;
   final Color accent;
   final Color textPrimary;
@@ -1102,6 +1128,112 @@ class _StickyCta extends StatelessWidget {
     final selectedPkg = packages.isNotEmpty ? packages[selectedIndex] : null;
     final trialDuration = _trialLabel(selectedPkg);
     final hasTrial = trialDuration != null;
+
+    if (isPro) {
+      // Already subscribed — the comparison table above is still worth
+      // showing (e.g. to see what's unlocked), but a "Get Pro" button that
+      // charges an already-paying customer again has no legitimate use.
+      return Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          border: Border(top: BorderSide(color: borderColor, width: 1)),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          MediaQuery.of(context).padding.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: AppColors.premiumGold.withValues(alpha: 0.10),
+                border: Border.all(
+                  color: AppColors.premiumGold.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.premiumGold.withValues(alpha: 0.18),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium_rounded,
+                      color: AppColors.premiumGold,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "You're Pro",
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'Thanks for supporting ZStreak',
+                          style: TextStyle(color: textMuted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _PillLinkButton(
+                    icon: Icons.settings_outlined,
+                    label: 'Manage subscription',
+                    textPrimary: textPrimary,
+                    borderColor: borderColor,
+                    onTap: () => launchUrl(
+                      Uri.parse(
+                        'https://play.google.com/store/account/subscriptions'
+                        '?package=com.zstreak.app',
+                      ),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _PillLinkButton(
+                    icon: Icons.restore_rounded,
+                    label: AppCopy.paywallRestorePurchases,
+                    textPrimary: textPrimary,
+                    borderColor: borderColor,
+                    onTap: isBusy ? null : onRestore,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -1179,6 +1311,228 @@ class _StickyCta extends StatelessWidget {
                 color: textMuted,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Pill link button (already-Pro secondary actions) ────────────────────────
+
+class _PillLinkButton extends StatelessWidget {
+  const _PillLinkButton({
+    required this.icon,
+    required this.label,
+    required this.textPrimary,
+    required this.borderColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color textPrimary;
+  final Color borderColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: textPrimary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Guest sign-up gate (shown when a guest tries to buy) ────────────────────
+//
+// Moved here from paywall_navigation.dart — that helper used to show this
+// before a guest could even open the paywall at all, blocking them from
+// browsing pricing. Now it only fires at the moment a guest actually taps
+// "buy", from _PaywallScreenState._purchase.
+
+Future<void> showGuestGateSheet(BuildContext context) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => _GuestGateSheet(parentContext: context),
+  );
+}
+
+class _GuestGateSheet extends ConsumerWidget {
+  const _GuestGateSheet({required this.parentContext});
+
+  /// We keep a reference to the screen context so we can push routes on the
+  /// main navigator after the sheet is dismissed.
+  final BuildContext parentContext;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final accent = isDark ? AppColors.accent : AppColors.accentTextOnLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final textMuted = isDark ? AppColors.textMuted : AppColors.textMutedLight;
+    final borderColor = isDark ? AppColors.border : AppColors.borderLight;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: borderColor, width: 1)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        20,
+        24,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: textMuted.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Icon
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent.withValues(alpha: 0.12),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: const Center(
+              child: Text('🔥', style: TextStyle(fontSize: 26)),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Headline
+          Text(
+            'Create an account to go Pro',
+            style: TextStyle(
+              color: textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+
+          // Sub-copy
+          Text(
+            'A free account keeps your streak safe and\nlets you unlock Pro features.',
+            style: TextStyle(color: textMuted, fontSize: 13, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+
+          // Primary CTA — Sign up
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // close sheet
+                // Replaces the guest PaywallScreen itself rather than
+                // pushing on top of it — otherwise LinkAccountScreen's own
+                // pushReplacement (back to a *new* PaywallScreen once
+                // signed up) leaves this original one stranded underneath,
+                // and back would land on a stale second paywall.
+                Navigator.of(parentContext).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => const LinkAccountScreen(thenPaywall: true),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: isDark ? Colors.black : Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text(
+                'Sign up - it\'s free',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Secondary CTA — Sign in
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).pop(); // close sheet
+              // Same reasoning as the sign-up button above.
+              Navigator.of(parentContext).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => const SignInScreen(
+                    fromOnboarding: false,
+                    thenPaywall: true,
+                  ),
+                ),
+              );
+            },
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Already have an account? ',
+                    style: TextStyle(color: textMuted, fontSize: 13),
+                  ),
+                  TextSpan(
+                    text: 'Sign in',
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

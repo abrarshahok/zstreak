@@ -6,8 +6,8 @@
 /// 2. Copy the **Public SDK key** (starts with "goog_…").
 /// 3. Replace the [androidApiKey] value below with that key.
 ///
-/// 4. In the RevenueCat dashboard create an **Entitlement** named "pro"
-///    (must match [premiumEntitlementId] exactly).
+/// 4. In the RevenueCat dashboard create an **Entitlement** named "ZStreak
+///    Pro" (must match [premiumEntitlementId] exactly).
 ///
 /// 5. Create at least one **Product** in Google Play Console, then attach it
 ///    to an **Offering** in RevenueCat. The paywall will show whatever
@@ -36,5 +36,5 @@ class RevenueCatConfig {
   );
 
   /// Must match the Entitlement identifier in your RevenueCat dashboard.
-  static const String premiumEntitlementId = 'pro';
+  static const String premiumEntitlementId = 'ZStreak Pro';
 }
