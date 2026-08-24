@@ -1121,6 +1121,14 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
                             width: 52,
                             height: 52,
                             fit: BoxFit.cover,
+                            // Bounds the decoded bitmap to roughly what a
+                            // 52x52 circle actually needs — without this,
+                            // a full-resolution Google profile photo gets
+                            // decoded at its source size on every rebuild.
+                            cacheWidth: (52 * MediaQuery.of(context).devicePixelRatio)
+                                .round(),
+                            cacheHeight: (52 * MediaQuery.of(context).devicePixelRatio)
+                                .round(),
                             errorBuilder: (context, error, stackTrace) =>
                                 initialsFallback,
                           ),

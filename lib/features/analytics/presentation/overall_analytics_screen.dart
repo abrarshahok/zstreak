@@ -665,20 +665,27 @@ class _AnalyticsBodyState extends ConsumerState<_AnalyticsBody> {
         .clamp(0, 100);
 
     // Chart data for selected window
+    //
+    // Built as a single pass over every habit's full history into a
+    // date -> count map, then looked up per chart day — the previous
+    // version re-filtered `results.values.expand((r) => r.days)` (every
+    // day of every habit's entire stored history) from scratch inside the
+    // List.generate loop, i.e. once per chart day. That's O(chartDays x
+    // total-history) recomputed on every rebuild; this is O(total-history
+    // + chartDays).
     final chartDays = _filter.days ?? 30;
     final today = DateTime.now();
+    final completedCountByDate = <String, int>{};
+    for (final r in results.values) {
+      for (final day in r.days) {
+        if (day.status != DayStatus.completed) continue;
+        final key = localDateString(day.date);
+        completedCountByDate[key] = (completedCountByDate[key] ?? 0) + 1;
+      }
+    }
     final chartData = List.generate(chartDays, (i) {
       final d = today.subtract(Duration(days: chartDays - 1 - i));
-      final ds = localDateString(d);
-      final count = results.values
-          .expand((r) => r.days)
-          .where(
-            (day) =>
-                localDateString(day.date) == ds &&
-                day.status == DayStatus.completed,
-          )
-          .length;
-      return _DayCount(date: d, count: count);
+      return _DayCount(date: d, count: completedCountByDate[localDateString(d)] ?? 0);
     });
 
     // Day-of-week rates

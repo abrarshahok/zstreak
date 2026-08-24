@@ -65,6 +65,24 @@ class WeekdaysConfig extends FrequencyConfig {
 
   @override
   Map<String, dynamic> toJson() => {'weekdays': weekdays};
+
+  // fromJson() rebuilds a new instance (with a new `weekdays` list) from
+  // every Firestore snapshot, so identity equality would never hold across
+  // reloads — needed for Habit's own value equality (see habit.dart) to
+  // actually compare configs by content instead of always differing.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! WeekdaysConfig) return false;
+    if (weekdays.length != other.weekdays.length) return false;
+    for (var i = 0; i < weekdays.length; i++) {
+      if (weekdays[i] != other.weekdays[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(weekdays);
 }
 
 class XPerWeekConfig extends FrequencyConfig {
@@ -81,4 +99,14 @@ class XPerWeekConfig extends FrequencyConfig {
     'timesPerWeek': timesPerWeek,
     'weekStartsOnMonday': weekStartsOnMonday,
   };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is XPerWeekConfig &&
+          timesPerWeek == other.timesPerWeek &&
+          weekStartsOnMonday == other.weekStartsOnMonday);
+
+  @override
+  int get hashCode => Object.hash(timesPerWeek, weekStartsOnMonday);
 }

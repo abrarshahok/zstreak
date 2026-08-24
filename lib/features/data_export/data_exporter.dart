@@ -262,9 +262,20 @@ class DataExporter {
       p.join(dir.path, '${_fileNameBase('ZStreak_Export')}.csv'),
     );
     await file.writeAsString(csv);
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], text: 'My ZStreak data export'),
-    );
+    try {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: 'My ZStreak data export'),
+      );
+    } finally {
+      // The export contains the user's name/email/habit notes in plaintext
+      // — don't leave that sitting in temp storage indefinitely once the
+      // share sheet has taken it. Best-effort: the file may already be
+      // gone, or another process may briefly still hold it, and that's not
+      // worth failing the export over.
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
   List<List<String>> _summaryRows(_ReportData data) => [
@@ -380,9 +391,17 @@ class DataExporter {
       p.join(dir.path, '${_fileNameBase('ZStreak_Report')}.pdf'),
     );
     await file.writeAsBytes(bytes);
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], text: 'My ZStreak data export'),
-    );
+    try {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: 'My ZStreak data export'),
+      );
+    } finally {
+      // See shareCsv's matching comment — same plaintext-PII-in-temp
+      // concern, same best-effort cleanup.
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
   }
 
   pw.Widget _sectionTitle(String title) => pw.Text(
