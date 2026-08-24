@@ -66,18 +66,35 @@ Future<void> main() async {
   // Crashlytics) — and before Firebase.initializeApp() resolves it can't run
   // at all, so it belongs after the Future.wait above, not inside it.
   //
-  // NOT yet enforced server-side (see Firebase Console -> App Check) — this
-  // app is already live, and existing installs won't have this SDK until
-  // they update. Ship this unenforced first, watch the console's
-  // verified-vs-rejected metrics as old versions phase out, and only then
-  // flip Firestore enforcement on. Local/emulator runs also need the debug
-  // token this prints on first launch registered under Console -> App Check
-  // -> Manage debug tokens, or App Check calls will simply fail closed.
+  // Firestore enforcement is ON (Console -> App Check). Play Integrity /
+  // App Attest can't produce a valid attestation from a debug build /
+  // emulator (no real Play Store install, possibly no Play Services at
+  // all) — using them there wouldn't just be inconvenient, calls would be
+  // rejected outright. The debug provider is the actual mechanism for
+  // that case: it sends a fixed secret instead of a real attestation,
+  // which is only accepted because that exact secret was separately
+  // registered under Console -> App Check -> Manage debug tokens. Never
+  // reaches the debug branch in a release build, so there's no risk of
+  // shipping that bypass to a real device.
+  //
+  // Pass --dart-define=APP_CHECK_DEBUG_TOKEN=<value> to pin every debug
+  // build to one already-registered token instead of each install
+  // generating (and needing to separately register) its own — Firebase's
+  // own CLI explicitly warns this value shouldn't be committed to source,
+  // so it stays out of this file entirely; leaving it unset falls back to
+  // per-install auto-generation, printed to the console on first launch.
+  const debugToken = String.fromEnvironment('APP_CHECK_DEBUG_TOKEN');
   await FirebaseAppCheck.instance.activate(
-    providerAndroid: const AndroidPlayIntegrityProvider(),
+    providerAndroid: kDebugMode
+        ? AndroidDebugProvider(
+            debugToken: debugToken.isEmpty ? null : debugToken,
+          )
+        : const AndroidPlayIntegrityProvider(),
     // Falls back to Device Check on iOS <14/macOS <14 instead of failing
     // outright, since App Attest alone requires iOS 14+/macOS 14+.
-    providerApple: const AppleAppAttestWithDeviceCheckFallbackProvider(),
+    providerApple: kDebugMode
+        ? AppleDebugProvider(debugToken: debugToken.isEmpty ? null : debugToken)
+        : const AppleAppAttestWithDeviceCheckFallbackProvider(),
   );
 
   // Explicit for clarity — on for signed-in users so check-ins stay
