@@ -34,7 +34,6 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
   void initState() {
     super.initState();
     _initNotifications();
-    _initRevenueCat();
     _refreshNotifications();
     _syncWidgets();
     listenForPinnedHabitWidget(_onWidgetPinned);
@@ -102,13 +101,6 @@ class _ZStreakAppState extends ConsumerState<ZStreakApp> {
       }
     });
   }
-
-  /// One-time SDK setup — logging the current Firebase user in (or out)
-  /// afterward is [revenueCatIdentitySyncProvider]'s job now, watched in
-  /// [build] below, which also covers the cold-start case (the
-  /// already-resolved initial uid) that used to need special-casing here.
-  Future<void> _initRevenueCat() =>
-      ref.read(revenueCatServiceProvider).initialize();
 
   Future<void> _openHabit(String habitId) async {
     final habit = await ref.read(habitRepositoryProvider).getHabitById(habitId);

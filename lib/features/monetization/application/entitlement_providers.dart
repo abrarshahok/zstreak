@@ -16,6 +16,24 @@ final entitlementRepositoryProvider = Provider<EntitlementRepository>(
       RevenueCatEntitlementRepository(ref.watch(revenueCatServiceProvider)),
 );
 
+/// Configures the RevenueCat SDK exactly once. Every other RevenueCat-
+/// touching provider awaits this first so nothing ever calls into the SDK
+/// before it's actually configured.
+///
+/// This used to only happen via a fire-and-forget call in
+/// `ZStreakApp.initState` with no ordering guarantee relative to anything
+/// that checked entitlements on the same cold start — in particular
+/// [WidgetConfigureScreen], which can be main.dart's very first route (the
+/// OS's own widget-configure intent). If [revenueCatIdentitySyncProvider]
+/// below called `Purchases.logIn()` before that fire-and-forget
+/// `Purchases.configure()` call had finished, it threw; a plain
+/// `FutureProvider` caches that as a permanent error, not "still loading",
+/// so a real Pro user saw the "Subscribe to Pro" gate with no retry until
+/// the next cold start happened to not lose the race.
+final revenueCatInitProvider = FutureProvider<void>(
+  (ref) => ref.read(revenueCatServiceProvider).initialize(),
+);
+
 /// Keeps RevenueCat's own identity (`Purchases.logIn`/`logOut`) in sync
 /// with the current Firebase uid — the single place that call happens now.
 ///
@@ -43,6 +61,9 @@ final entitlementRepositoryProvider = Provider<EntitlementRepository>(
 /// first time anything watches it, so that case just falls out for free
 /// here instead of needing a separate manual check.
 final revenueCatIdentitySyncProvider = FutureProvider<void>((ref) async {
+  // Must complete before any other Purchases.* call — see
+  // revenueCatInitProvider's doc comment.
+  await ref.watch(revenueCatInitProvider.future);
   final service = ref.watch(revenueCatServiceProvider);
   // Awaits the stream's actual next/current value instead of reading
   // authStateProvider's AsyncValue synchronously (`.valueOrNull`) — while
