@@ -6,6 +6,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../habits/application/habit_providers.dart';
 import '../application/home_tour_providers.dart';
 
+/// True once any [HomeTourOverlay] instance has attempted the tour this
+/// process lifetime — see the guard in [_HomeTourOverlayState._maybeShowTour]
+/// for why this needs to live outside any single instance's state.
+bool _tourAttemptedThisSession = false;
+
 /// Wraps [HomeScreen]'s Scaffold and, the first time Home is ever shown,
 /// fires a spotlight walkthrough over the Add Habit button, the first
 /// habit card (if one exists yet), and the header icons — see
@@ -33,6 +38,17 @@ class _HomeTourOverlayState extends ConsumerState<HomeTourOverlay> {
   }
 
   Future<void> _maybeShowTour() async {
+    // Guards against two HomeTourOverlay instances existing in quick
+    // succession (e.g. a transient rebuild of the guest/entitlement gates
+    // above Home right after cold start) both reading homeTourSeenProvider
+    // as false before either has finished and marked it seen — which
+    // played the whole tour twice back to back. This check-then-set is
+    // synchronous (no await before it), so only the first instance to
+    // reach it ever proceeds, regardless of how the seen-flag write times
+    // out relative to a second instance's own check.
+    if (_tourAttemptedThisSession) return;
+    _tourAttemptedThisSession = true;
+
     if (ref.read(homeTourSeenProvider)) return;
 
     // Waits for the stream's first real emission rather than reading
