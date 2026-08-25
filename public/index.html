@@ -193,53 +193,28 @@
         flex-shrink: 0;
       }
 
-      /* ── Play Store badge button (the one dominant CTA, repeated) ─────────────── */
+      /* ── Play Store badge (official asset — the one dominant CTA, repeated) ──── */
       .play-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        background: #000;
-        color: #fff;
-        padding: 10px 18px;
-        border-radius: 10px;
+        display: inline-block;
+        line-height: 0;
         transition:
           transform 0.15s,
           opacity 0.15s;
-        border: 1px solid rgba(255, 255, 255, 0.12);
       }
       .play-badge:hover {
         transform: translateY(-1px);
         opacity: 0.9;
       }
-      .play-badge svg {
-        width: 18px;
-        height: 18px;
-        flex-shrink: 0;
+      .play-badge img {
+        height: 44px;
+        width: auto;
+        display: block;
       }
-      .play-badge-text {
-        display: flex;
-        flex-direction: column;
-        line-height: 1.15;
+      .play-badge.compact img {
+        height: 36px;
       }
-      .play-badge-text .small {
-        font-size: 9px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-        color: #cfcfcf;
-        text-transform: uppercase;
-      }
-      .play-badge-text .big {
-        font-size: 16px;
-        font-weight: 700;
-      }
-      .play-badge.compact {
-        padding: 9px 16px;
-      }
-      .play-badge.large {
-        padding: 13px 24px;
-      }
-      .play-badge.large .big {
-        font-size: 18px;
+      .play-badge.large img {
+        height: 56px;
       }
 
       .link-quiet {
@@ -287,6 +262,13 @@
         align-items: center;
         text-align: center;
       }
+      /* Grid/flex items default to min-width:auto, which blocks shrinking below
+         their content's intrinsic size — without this, the fixed-width phone
+         fan below refuses to shrink on narrow screens and forces the whole
+         hero (including the paragraph text) to overflow horizontally. */
+      .hero-inner > * {
+        min-width: 0;
+      }
       .hero-badge {
         display: inline-flex;
         align-items: center;
@@ -324,9 +306,142 @@
         align-items: center;
         gap: 14px;
       }
+      /* ── Hero: side-by-side on wider screens, so the phones show up-front ────── */
+      @media (min-width: 980px) {
+        .hero { padding: 96px 0 72px; }
+        .hero-inner {
+          grid-template-columns: minmax(0, 440px) 1fr;
+          text-align: left;
+          gap: 24px;
+        }
+        .hero p.lede { margin: 0 0 30px; }
+        .hero-actions { align-items: flex-start; }
+        .hero-visual { justify-content: flex-end; }
+      }
+      /* ── Phone skin: flat matte Android frame, corner punch-hole ──────────────── */
+      .phone-frame {
+        position: relative;
+        aspect-ratio: 1080 / 2280;
+        border-radius: 13% / 6.16%;
+        background: linear-gradient(165deg, #26262a, #1a1a1d 55%, #141416 100%);
+        box-shadow:
+          0 40px 90px -20px rgba(0, 0, 0, 0.55),
+          0 10px 24px -10px rgba(0, 0, 0, 0.4),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        flex-shrink: 0;
+        transition: transform 0.35s ease, box-shadow 0.35s ease;
+      }
+      .phone-frame::before {
+        content: "";
+        position: absolute;
+        right: -3px;
+        top: 20%;
+        width: 3px;
+        height: 8.5%;
+        border-radius: 0 2px 2px 0;
+        background: #303034;
+        box-shadow: 1px 0 3px rgba(0, 0, 0, 0.4);
+      }
+      .phone-frame::after {
+        content: "";
+        position: absolute;
+        left: -3px;
+        top: 13%;
+        width: 3px;
+        height: 13%;
+        border-radius: 2px 0 0 2px;
+        background: #303034;
+        box-shadow: -1px 0 3px rgba(0, 0, 0, 0.4);
+      }
+      .phone-screen {
+        position: absolute;
+        inset: 1.9% 2.1%;
+        border-radius: 10.2% / 4.84%;
+        overflow: hidden;
+        background: #000;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+      }
+      .phone-screen img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .phone-screen::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(
+          122deg,
+          rgba(255, 255, 255, 0.06) 0%,
+          transparent 14%,
+          transparent 80%,
+          rgba(255, 255, 255, 0.04) 100%
+        );
+      }
+      .cam-dot {
+        position: absolute;
+        top: 2.6%;
+        right: 8%;
+        width: 2.6%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #17171a, #000 70%);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+        z-index: 3;
+      }
+
+      /* ── Hero: three fanned phones in one row ─────────────────────────────────── */
       .hero-visual {
         display: flex;
         justify-content: center;
+        align-items: center;
+      }
+      .hero-visual .phone-frame {
+        width: 104px;
+      }
+      .hero-visual .phone-frame.center {
+        width: 124px;
+        z-index: 2;
+      }
+      .hero-visual .phone-frame.side {
+        opacity: 0.92;
+        filter: brightness(0.82) saturate(0.95);
+      }
+      .hero-visual .phone-frame.tilt-left {
+        transform: rotate(-10deg) translate(9px, 12px);
+        margin-right: -19px;
+      }
+      .hero-visual .phone-frame.tilt-right {
+        transform: rotate(10deg) translate(-9px, 12px);
+        margin-left: -19px;
+      }
+      @media (min-width: 480px) {
+        .hero-visual .phone-frame { width: 140px; }
+        .hero-visual .phone-frame.center { width: 168px; }
+        .hero-visual .phone-frame.tilt-left { transform: rotate(-10deg) translate(12px, 17px); margin-right: -26px; }
+        .hero-visual .phone-frame.tilt-right { transform: rotate(10deg) translate(-12px, 17px); margin-left: -26px; }
+      }
+      @media (min-width: 640px) {
+        .hero-visual .phone-frame { width: 200px; }
+        .hero-visual .phone-frame.center { width: 240px; box-shadow: 0 40px 90px -16px rgba(var(--accent-rgb), 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.07); }
+        .hero-visual .phone-frame.tilt-left { transform: rotate(-11deg) translate(22px, 29px); margin-right: -42px; }
+        .hero-visual .phone-frame.tilt-right { transform: rotate(11deg) translate(-22px, 29px); margin-left: -42px; }
+      }
+      /* Side-by-side hero needs a narrower right column, so the fan is resized
+         down from the full-width single-column sizing above. */
+      @media (min-width: 980px) {
+        .hero-visual .phone-frame { width: 152px; }
+        .hero-visual .phone-frame.center { width: 180px; }
+        .hero-visual .phone-frame.tilt-left { transform: rotate(-9deg) translate(14px, -6px); margin-right: -28px; }
+        .hero-visual .phone-frame.tilt-right { transform: rotate(9deg) translate(-14px, -6px); margin-left: -28px; }
+      }
+      @media (min-width: 1180px) {
+        .hero-visual .phone-frame { width: 184px; }
+        .hero-visual .phone-frame.center { width: 218px; }
+        .hero-visual .phone-frame.tilt-left { transform: rotate(-9deg) translate(18px, -8px); margin-right: -36px; }
+        .hero-visual .phone-frame.tilt-right { transform: rotate(9deg) translate(-18px, -8px); margin-left: -36px; }
       }
 
       /* ── Trust strip ───────────────────────────────────────────────────────────── */
@@ -351,135 +466,6 @@
       }
       .trust-item .dot {
         color: var(--accent);
-      }
-
-      /* ── Screenshot showcase ───────────────────────────────────────────────────── */
-      .showcase {
-        padding: 96px 0;
-        border-bottom: 1px solid var(--border);
-      }
-      .showcase-track {
-        display: flex;
-        gap: 28px;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        scroll-behavior: smooth;
-        padding: 8px 24px 28px;
-        margin: 40px -24px 0;
-        scrollbar-width: none;
-      }
-      .showcase-track::-webkit-scrollbar {
-        display: none;
-      }
-      .showcase-item {
-        scroll-snap-align: start;
-        flex-shrink: 0;
-        width: 240px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 18px;
-      }
-      /* Phone skin: sized by percentage, not px, so this one rule works
-         at any element width - the hero's larger phone and the showcase's
-         smaller ones share the exact same skin. Vertical radius/inset % =
-         horizontal % x 0.4737 (the fixed 1080:2280 screenshot aspect
-         ratio) so corners render circular instead of elliptical. */
-      .phone-frame {
-        width: 240px;
-        aspect-ratio: 1080 / 2280;
-        border-radius: 9.5% / 4.5%;
-        background: #050507;
-        border: 2px solid var(--border);
-        box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.4);
-        position: relative;
-        overflow: hidden;
-        flex-shrink: 0;
-        transition:
-          transform 0.2s,
-          box-shadow 0.2s;
-      }
-      .showcase-item:hover .phone-frame {
-        transform: translateY(-4px);
-        box-shadow: 0 30px 80px -12px rgba(var(--accent-rgb), 0.4);
-      }
-      .phone-frame .notch {
-        position: absolute;
-        top: 1.28%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 9.55%;
-        height: 4px;
-        border-radius: 3px;
-        background: rgba(255, 255, 255, 0.18);
-        z-index: 2;
-      }
-      .phone-frame img {
-        position: absolute;
-        top: 1%;
-        bottom: 1%;
-        left: 2.1%;
-        right: 2.1%;
-        width: auto;
-        height: auto;
-        border-radius: 7.46% / 3.53%;
-        object-fit: fill;
-        display: block;
-      }
-      .hero-visual .phone-frame {
-        width: 260px;
-        box-shadow: 0 40px 90px -16px rgba(var(--accent-rgb), 0.35);
-      }
-      @media (min-width: 480px) {
-        .hero-visual .phone-frame {
-          width: 300px;
-        }
-      }
-      .showcase-caption {
-        text-align: center;
-        max-width: 240px;
-      }
-      .showcase-caption-title {
-        font-size: 15px;
-        font-weight: 700;
-        margin-bottom: 4px;
-      }
-      .showcase-caption-sub {
-        font-size: 12.5px;
-        color: var(--muted);
-        line-height: 1.55;
-      }
-      .showcase-nav {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        margin-top: 4px;
-      }
-      .showcase-nav-btn {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-size: 16px;
-        color: var(--text);
-        transition:
-          border-color 0.15s,
-          transform 0.15s;
-      }
-      .showcase-nav-btn:hover {
-        border-color: var(--accent);
-        transform: translateY(-1px);
-      }
-      @media (min-width: 900px) {
-        .showcase-item,
-        .showcase-item .phone-frame {
-          width: 268px;
-        }
       }
 
       /* ── Section header (shared) ───────────────────────────────────────────────── */
@@ -558,46 +544,7 @@
         padding: 96px 0;
         border-top: 1px solid var(--border);
       }
-      .steps {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-top: 56px;
-      }
-      .step {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px;
-        position: relative;
-      }
-      .step-num {
-        width: 32px;
-        height: 32px;
-        background: var(--accent-dim);
-        border: 1px solid var(--accent-border);
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 13px;
-        font-weight: 800;
-        color: var(--accent);
-        margin-bottom: 16px;
-      }
-      .step-title {
-        font-size: 15px;
-        font-weight: 700;
-        margin-bottom: 8px;
-      }
-      .step-desc {
-        font-size: 13px;
-        color: var(--muted);
-        line-height: 1.6;
-      }
-
       .live-demo {
-        margin-top: 40px;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 20px;
@@ -919,7 +866,6 @@
             <span class="wordmark-text">ZSTREAK</span>
           </div>
           <div class="nav-links">
-            <a href="#screenshots" class="nav-link">Screenshots</a>
             <a href="#features" class="nav-link">Features</a>
             <a href="#how" class="nav-link">How it works</a>
             <a href="#pricing" class="nav-link">Pricing</a>
@@ -934,16 +880,9 @@
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
               class="play-badge compact"
+              aria-label="Get it on Google Play"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path
-                  d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
-                />
-              </svg>
-              <span class="play-badge-text">
-                <span class="small">Get it on</span>
-                <span class="big">Google Play</span>
-              </span>
+              <img src="/assets/google-play-badge.png" alt="Get it on Google Play" width="646" height="250" />
             </a>
           </div>
         </div>
@@ -964,29 +903,40 @@
             <a
               href="https://play.google.com/store/apps/details?id=com.zstreak.app"
               class="play-badge large"
+              aria-label="Get it on Google Play"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path
-                  d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
-                />
-              </svg>
-              <span class="play-badge-text">
-                <span class="small">Get it on</span>
-                <span class="big">Google Play</span>
-              </span>
+              <img src="/assets/google-play-badge.png" alt="Get it on Google Play" width="646" height="250" />
             </a>
-            <a href="#screenshots" class="link-quiet">See what it looks like ↓</a>
+            <a href="#features" class="link-quiet">See what's inside ↓</a>
           </div>
         </div>
         <div class="hero-visual">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/home-dark.png"
-              alt="ZStreak home screen showing level, today's mood, streaks, and a habit list"
-              width="300"
-              height="633"
-            />
+          <div class="phone-frame side tilt-left">
+            <div class="phone-screen">
+              <span class="cam-dot"></span>
+              <img
+                src="/screenshots/analytics-1.png"
+                alt="ZStreak analytics screen showing a consistency score, level, and 30-day activity"
+              />
+            </div>
+          </div>
+          <div class="phone-frame center">
+            <div class="phone-screen">
+              <span class="cam-dot"></span>
+              <img
+                src="/screenshots/home-dark.png"
+                alt="ZStreak home screen showing level, today's mood, streaks, and a habit list"
+              />
+            </div>
+          </div>
+          <div class="phone-frame side tilt-right">
+            <div class="phone-screen">
+              <span class="cam-dot"></span>
+              <img
+                src="/screenshots/habit-detail-1.png"
+                alt="ZStreak habit detail screen showing streak stats and a history calendar"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1001,202 +951,6 @@
         <div class="trust-item"><span class="dot">●</span> No ads, ever</div>
       </div>
     </div>
-
-    <!-- ── Screenshot showcase ────────────────────────────────────────────────────── -->
-    <section class="showcase" id="screenshots">
-      <div class="container">
-        <div class="section-label">⚡ See it in action</div>
-        <h2 class="section-title">Real screens.<br />Real habits.</h2>
-        <p class="section-sub">
-          Every screenshot below is the actual app — nothing staged, nothing
-          faked.
-        </p>
-      </div>
-      <div class="showcase-track" id="showcaseTrack">
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/home-dark.png"
-              alt="ZStreak home screen in dark mode, showing level, mood, and today's habits"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Everything today, at a glance.</div>
-            <div class="showcase-caption-sub">
-              Level, mood, streaks, and your whole list, right up top.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/home-light.png"
-              alt="ZStreak home screen in light mode"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Light or dark. Your call.</div>
-            <div class="showcase-caption-sub">Looks just as good either way.</div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/home-variety.png"
-              alt="A colorful list of different habits, each with its own color and category"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">
-              However many habits. However you like them.
-            </div>
-            <div class="showcase-caption-sub">
-              Color-code, categorize, and make every streak your own.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/analytics-1.png"
-              alt="Analytics screen showing a consistency score, level, and 30-day activity chart"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Know exactly where you stand.</div>
-            <div class="showcase-caption-sub">
-              A consistency score, your level, and 30 days of activity in one view.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/analytics-2.png"
-              alt="Analytics screen showing a full year contribution heatmap and a per-habit breakdown"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">See the whole picture.</div>
-            <div class="showcase-caption-sub">
-              A full year at a glance, plus a breakdown for every habit.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/edit-habit-1.png"
-              alt="Add habit screen showing a 26-color palette, frequency picker, and categories"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Make it yours.</div>
-            <div class="showcase-caption-sub">
-              26 colors, flexible frequency, and your own categories.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/edit-habit-2.png"
-              alt="Add habit screen showing the quantity-tracking and quit-habit toggles"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Any habit, tracked your way.</div>
-            <div class="showcase-caption-sub">Track a number, or quit something for good.</div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/habit-detail-1.png"
-              alt="Habit detail screen showing streak stats and a monthly calendar"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Every habit has a story.</div>
-            <div class="showcase-caption-sub">
-              Streaks, completion rate, and full history at a glance.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/habit-detail-2.png"
-              alt="Habit detail screen showing a 30-day activity chart, best days, and a year heatmap"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">The deep dive.</div>
-            <div class="showcase-caption-sub">
-              30-day activity, your best days, and a year of progress.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/save-note.png"
-              alt="A bottom sheet for logging a day, with an optional note field"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Add detail anytime.</div>
-            <div class="showcase-caption-sub">
-              Notes on any day, without losing that day's status.
-            </div>
-          </div>
-        </div>
-        <div class="showcase-item">
-          <div class="phone-frame">
-            <div class="notch"></div>
-            <img
-              src="/screenshots/widget.png"
-              alt="ZStreak home screen widgets on an Android launcher"
-              loading="lazy"
-            />
-          </div>
-          <div class="showcase-caption">
-            <div class="showcase-caption-title">Right on your home screen.</div>
-            <div class="showcase-caption-sub">Check in without even opening the app.</div>
-          </div>
-        </div>
-      </div>
-      <div class="container">
-        <div class="showcase-nav">
-          <button class="showcase-nav-btn" id="showcasePrev" aria-label="Previous screenshot">
-            ←
-          </button>
-          <button class="showcase-nav-btn" id="showcaseNext" aria-label="Next screenshot">
-            →
-          </button>
-        </div>
-      </div>
-    </section>
 
     <!-- ── Features ──────────────────────────────────────────────────────────────── -->
     <section class="features" id="features">
@@ -1265,46 +1019,6 @@
     <!-- ── How it works ───────────────────────────────────────────────────────────── -->
     <section class="how" id="how">
       <div class="container">
-        <div class="section-label">⚡ How it works</div>
-        <h2 class="section-title">Start in 60 seconds.</h2>
-        <p class="section-sub">
-          No account required to get started. Just download, add a habit, and
-          start your streak today.
-        </p>
-        <div class="steps">
-          <div class="step">
-            <div class="step-num">1</div>
-            <div class="step-title">Download the app</div>
-            <div class="step-desc">
-              Free on Android. No sign-up required — start as a guest and
-              track habits immediately.
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-num">2</div>
-            <div class="step-title">Add your first habit</div>
-            <div class="step-desc">
-              Set a name, emoji, color, and frequency in seconds.
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-num">3</div>
-            <div class="step-title">Check in daily</div>
-            <div class="step-desc">
-              Tap to mark a habit done. Watch your streak grow. Get reminded
-              if you're about to break the chain.
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-num">4</div>
-            <div class="step-title">Sync & back up</div>
-            <div class="step-desc">
-              Link your Google account to sync across devices and never lose
-              your progress.
-            </div>
-          </div>
-        </div>
-
         <!-- Live, interactive demo of the actual tap-to-check-in interaction -->
         <div class="live-demo">
           <div class="live-demo-copy">
@@ -1398,16 +1112,9 @@
           <a
             href="https://play.google.com/store/apps/details?id=com.zstreak.app"
             class="play-badge large"
+            aria-label="Get it on Google Play"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path
-                d="M4 3.5v17a1 1 0 0 0 1.5.87l14-8.5a1 1 0 0 0 0-1.74l-14-8.5A1 1 0 0 0 4 3.5z"
-              />
-            </svg>
-            <span class="play-badge-text">
-              <span class="small">Get it on</span>
-              <span class="big">Google Play</span>
-            </span>
+            <img src="/assets/google-play-badge.png" alt="Get it on Google Play" width="646" height="250" />
           </a>
         </div>
       </div>
@@ -1460,30 +1167,6 @@
             applyTheme(!isDark);
           });
         }
-      })();
-
-      // ── Screenshot showcase scroll buttons ─────────────────────────────────────
-      (function () {
-        var track = document.getElementById("showcaseTrack");
-        var prev = document.getElementById("showcasePrev");
-        var next = document.getElementById("showcaseNext");
-        if (!track) return;
-
-        function scrollByCard(dir) {
-          var item = track.querySelector(".showcase-item");
-          var gap = 28;
-          var step = item ? item.getBoundingClientRect().width + gap : 260;
-          track.scrollBy({ left: dir * step, behavior: "smooth" });
-        }
-
-        if (prev)
-          prev.addEventListener("click", function () {
-            scrollByCard(-1);
-          });
-        if (next)
-          next.addEventListener("click", function () {
-            scrollByCard(1);
-          });
       })();
 
       // ── Habit tile simulation ────────────────────────────────────────────────────
