@@ -58,10 +58,29 @@ Future<void> performCheckIn({
     }
 
     HapticFeedback.mediumImpact();
+    // For a quantity habit, `setCheckIn` leaves an omitted `value` alone —
+    // it does not clear it — so writing status: completed here without
+    // also touching value can leave a completed day paired with a
+    // still-below-target logged amount. That's exactly what then made
+    // adjusting the quantity stepper afterward immediately flip it back to
+    // missed (it derives status fresh from value vs target on every tap),
+    // reading as "checking it in un-checks it". Same rule as the
+    // Complete button elsewhere: if what's already logged doesn't meet
+    // target, assume the tap means "I hit my goal" instead of leaving
+    // status and value disagreeing.
+    int? valueOverride;
+    if (habit.isQuantityHabit) {
+      final target = habit.targetCount ?? 1;
+      final loggedValue =
+          ref.read(checkInProvider(CheckInQuery(habit.id, date))).valueOrNull?.value ??
+          0;
+      if (loggedValue < target) valueOverride = target;
+    }
     await repo.setCheckIn(
       habitId: habit.id,
       date: date,
       status: CheckInStatus.completed,
+      value: valueOverride,
     );
 
     final updated = await repo.getHabitById(habit.id);
