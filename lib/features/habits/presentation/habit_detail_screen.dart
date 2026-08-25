@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -620,7 +622,35 @@ Future<void> showDayActionSheet(
                     icon: Icons.check_rounded,
                     color: accent,
                     onTap: () {
-                      chosen = CheckInStatus.completed;
+                      // A quantity habit's completion is whatever was
+                      // actually logged meeting its target — not a separate,
+                      // independent claim. Without this, "Complete" here
+                      // (unlike the live Today card, which already derives
+                      // status the same way) could save completed with a
+                      // value under target, or "Clear" with one already at
+                      // target, silently disagreeing with the streak
+                      // calculator, which only ever reads `status`.
+                      if (habit.isQuantityHabit) {
+                        final target = habit.targetCount ?? 1;
+                        final typed = valueController.text.trim();
+                        // Left blank: "Complete" is an explicit claim of
+                        // having hit the goal, so assume the full target
+                        // rather than reading a never-touched field as 0
+                        // and immediately contradicting the tap. Fill the
+                        // field in too, so what's displayed matches what's
+                        // about to be saved as `value` below.
+                        final logged = typed.isEmpty
+                            ? target
+                            : (int.tryParse(typed) ?? 0);
+                        if (typed.isEmpty) {
+                          valueController.text = '$target';
+                        }
+                        chosen = logged >= target
+                            ? CheckInStatus.completed
+                            : CheckInStatus.missed;
+                      } else {
+                        chosen = CheckInStatus.completed;
+                      }
                       Navigator.of(sheetContext).pop();
                     },
                   ),
@@ -681,10 +711,15 @@ Future<void> showDayActionSheet(
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: () {
-                    chosen = existing.status;
-                    Navigator.of(sheetContext).pop();
-                  },
+                  // Deliberately doesn't set `chosen` itself — falls through
+                  // to the same "sheet closed without picking a status"
+                  // handling below, which (for a quantity habit) re-derives
+                  // status from whatever value ends up in the field rather
+                  // than blindly carrying over `existing.status`. Setting it
+                  // here instead would mean editing a note on a day whose
+                  // logged quantity no longer matches its saved status
+                  // silently keeps disagreeing with it.
+                  onPressed: () => Navigator.of(sheetContext).pop(),
                   icon: Icon(Icons.check_rounded, size: 16, color: accent),
                   label: Text(
                     'Save note',
@@ -710,13 +745,23 @@ Future<void> showDayActionSheet(
 
   if (chosen == null) {
     // No Complete/Skip/Clear button tapped - the sheet was dismissed some
-    // other way (tap outside, swipe down, back gesture). If the day
-    // already has a status and the user only edited the note or the
-    // logged quantity, save that against its existing status instead of
-    // silently discarding it - re-tapping the same status just to keep a
-    // note isn't something a user should have to do.
+    // other way (tap outside, swipe down, back gesture, or "Save note").
+    // If the day already has a status and the user only edited the note or
+    // the logged quantity, save that against its existing status instead
+    // of silently discarding it - re-tapping the same status just to keep
+    // a note isn't something a user should have to do.
     if (existing == null || !(noteChanged || valueChanged)) return;
-    chosen = existing.status;
+    // For a quantity habit, "existing status" isn't safe to carry over
+    // as-is unless it was an explicit skip — completed/missed is exactly
+    // what the logged value determines, and that value may be exactly
+    // what just changed. Re-deriving (same rule the Complete button
+    // above uses) keeps status honest instead of preserving whatever it
+    // happened to be before this edit.
+    chosen = (habit.isQuantityHabit && existing.status != CheckInStatus.skipped)
+        ? ((value ?? 0) >= (habit.targetCount ?? 1)
+              ? CheckInStatus.completed
+              : CheckInStatus.missed)
+        : existing.status;
   }
 
   await ref
@@ -1978,6 +2023,48 @@ class _QuantityProgressCard extends StatelessWidget {
   final Color accentColor;
   final ValueChanged<int> onChange;
 
+  /// Opens a plain numeric entry dialog so hitting a target like "60
+  /// minutes" doesn't mean 60 taps of the stepper below — typing the
+  /// number directly is the fast path; the steppers (with long-press
+  /// repeat, see [_StepperButton]) are for nudging a value that's already
+  /// close.
+  Future<void> _enterExactValue(BuildContext context) async {
+    final controller = TextEditingController(text: value == 0 ? '' : '$value');
+    final entered = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: surface,
+        title: Text(
+          'Log ${habit.targetUnit ?? "amount"}',
+          style: TextStyle(color: textPrimary),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: textPrimary),
+          decoration: InputDecoration(hintText: '$value'),
+          onSubmitted: (text) => Navigator.of(
+            dialogContext,
+          ).pop(int.tryParse(text.trim())),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(int.tryParse(controller.text.trim())),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (entered != null && entered >= 0) onChange(entered);
+  }
+
   @override
   Widget build(BuildContext context) {
     final target = habit.targetCount ?? 1;
@@ -1996,12 +2083,17 @@ class _QuantityProgressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                '$value',
-                style: TextStyle(
-                  color: textPrimary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 20,
+              GestureDetector(
+                onTap: () => _enterExactValue(context),
+                child: Text(
+                  '$value',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                    decoration: TextDecoration.underline,
+                    decorationColor: textMuted.withValues(alpha: 0.4),
+                  ),
                 ),
               ),
               Text(
@@ -2012,13 +2104,19 @@ class _QuantityProgressCard extends StatelessWidget {
               _StepperButton(
                 icon: Icons.remove_rounded,
                 color: textMuted,
-                onTap: value > 0 ? () => onChange(value - 1) : null,
+                value: value,
+                delta: -1,
+                enabled: value > 0,
+                onChanged: onChange,
               ),
               const SizedBox(width: 8),
               _StepperButton(
                 icon: Icons.add_rounded,
                 color: accentColor,
-                onTap: () => onChange(value + 1),
+                value: value,
+                delta: 1,
+                enabled: true,
+                onChanged: onChange,
               ),
             ],
           ),
@@ -2038,33 +2136,100 @@ class _QuantityProgressCard extends StatelessWidget {
   }
 }
 
-class _StepperButton extends StatelessWidget {
+/// A single tap steps by [delta]. Holding it repeats — accelerating the
+/// longer it's held — which is what actually makes a big target (60
+/// minutes, 10000 steps) practical without an exact-entry dialog.
+///
+/// The repeat loop computes every step as `value` (captured once, at
+/// press-start) `+ delta * ticksElapsed`, not "current value + delta"
+/// relative to whatever the last call resolved to — [onChanged] round-trips
+/// through a database write and a stream re-emission before this widget
+/// ever sees an updated [value], which is far slower than the repeat
+/// interval below. Reading a live-but-stale `value` on every tick would
+/// silently drop most of the held-down taps instead of accumulating them.
+class _StepperButton extends StatefulWidget {
   const _StepperButton({
     required this.icon,
     required this.color,
-    required this.onTap,
+    required this.value,
+    required this.delta,
+    required this.enabled,
+    required this.onChanged,
   });
 
   final IconData icon;
   final Color color;
-  final VoidCallback? onTap;
+  final int value;
+  final int delta;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_StepperButton> createState() => _StepperButtonState();
+}
+
+class _StepperButtonState extends State<_StepperButton> {
+  Timer? _repeatTimer;
+  int _baseValue = 0;
+  int _ticks = 0;
+
+  void _step() {
+    _ticks++;
+    final next = _baseValue + widget.delta * _ticks;
+    if (next < 0) return;
+    widget.onChanged(next);
+  }
+
+  void _startRepeating() {
+    _baseValue = widget.value;
+    _ticks = 0;
+    _repeatTimer?.cancel();
+    // A steady 350ms per tap already feels intentional; holding past ~1.5s
+    // speeds up to 100ms so a large target doesn't take forever either.
+    _repeatTimer = Timer.periodic(const Duration(milliseconds: 350), (timer) {
+      _step();
+      if (timer.tick == 4) {
+        timer.cancel();
+        _repeatTimer = Timer.periodic(
+          const Duration(milliseconds: 100),
+          (_) => _step(),
+        );
+      }
+    });
+  }
+
+  void _stopRepeating() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _repeatTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
+    final enabled = widget.enabled;
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? () => widget.onChanged(widget.value + widget.delta) : null,
+      onLongPressStart: enabled ? (_) => _startRepeating() : null,
+      onLongPressEnd: enabled ? (_) => _stopRepeating() : null,
+      onLongPressCancel: enabled ? _stopRepeating : null,
       child: Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: enabled ? 1 : 0.3)),
+          border: Border.all(
+            color: widget.color.withValues(alpha: enabled ? 1 : 0.3),
+          ),
         ),
         child: Icon(
-          icon,
+          widget.icon,
           size: 18,
-          color: color.withValues(alpha: enabled ? 1 : 0.3),
+          color: widget.color.withValues(alpha: enabled ? 1 : 0.3),
         ),
       ),
     );
