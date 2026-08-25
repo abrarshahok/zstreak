@@ -445,6 +445,44 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
     FrequencyType.xPerWeek => XPerWeekConfig(timesPerWeek: _timesPerWeek),
   };
 
+  Future<void> _enterExactTargetCount(BuildContext context) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.surface : AppColors.surfaceLight;
+    final textPrimary = isDark
+        ? AppColors.textPrimary
+        : AppColors.textPrimaryLight;
+    final controller = TextEditingController(text: '$_targetCount');
+    final entered = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: surface,
+        title: Text('Target count', style: TextStyle(color: textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: textPrimary),
+          onSubmitted: (text) => Navigator.of(
+            dialogContext,
+          ).pop(int.tryParse(text.trim())),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(int.tryParse(controller.text.trim())),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (entered != null && entered >= 1) setState(() => _targetCount = entered);
+  }
+
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
@@ -885,12 +923,21 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Text(
-                        'Target: $_targetCount',
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                      // Tappable — the +/- counter below is fine for
+                      // nudging a small target, but has no other way in
+                      // for something like "10000 steps" or "60 minutes"
+                      // short of tapping + that many times.
+                      GestureDetector(
+                        onTap: () => _enterExactTargetCount(context),
+                        child: Text(
+                          'Target: $_targetCount',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            decoration: TextDecoration.underline,
+                            decorationColor: textMuted.withValues(alpha: 0.4),
+                          ),
                         ),
                       ),
                       const Spacer(),
@@ -906,6 +953,11 @@ class _EditHabitScreenState extends ConsumerState<EditHabitScreen> {
                         onPressed: () => setState(() => _targetCount++),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tap "Target" to type an exact number',
+                    style: TextStyle(color: textMuted, fontSize: 11),
                   ),
                   const SizedBox(height: 10),
                   TextField(

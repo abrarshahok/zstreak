@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/copy/app_copy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_snack_bar.dart';
 import '../../../core/utils/color_hex.dart';
 import '../../../core/utils/local_date.dart';
 import '../../../core/widgets/flat_confirm_dialog.dart';
@@ -2062,7 +2063,19 @@ class _QuantityProgressCard extends StatelessWidget {
         ],
       ),
     );
-    if (entered != null && entered >= 0) onChange(entered);
+    if (entered == null || entered < 0) return;
+    onChange(entered);
+    // onChange's write round-trips through Firestore/Drift before the
+    // number on screen updates, and this dialog has no other visible
+    // confirmation once it closes — without this, saving reads as
+    // nothing happened at all.
+    if (context.mounted) {
+      AppSnackBar.show(
+        context,
+        'Logged $entered ${habit.targetUnit ?? ""}'.trim(),
+        type: SnackBarType.success,
+      );
+    }
   }
 
   @override
@@ -2119,6 +2132,15 @@ class _QuantityProgressCard extends StatelessWidget {
                 onChanged: onChange,
               ),
             ],
+          ),
+          const SizedBox(height: 4),
+          // The underline on the number above is a subtle hint, but not
+          // one every user will read as "tappable" on its own — this
+          // spells out the fast path in words instead of leaving it to
+          // be discovered by accident.
+          Text(
+            'Tap the number to type an exact amount',
+            style: TextStyle(color: textMuted, fontSize: 11),
           ),
           const SizedBox(height: 10),
           ClipRRect(
