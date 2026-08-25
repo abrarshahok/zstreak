@@ -1257,7 +1257,9 @@ class HabitGridCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${currentStreak}d streak',
+                    habit.isQuitHabit
+                        ? '${currentStreak}d clean'
+                        : '${currentStreak}d streak',
                     style: TextStyle(
                       color: textMuted,
                       fontSize: 11,

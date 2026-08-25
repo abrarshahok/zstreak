@@ -163,7 +163,9 @@ class HabitTile extends ConsumerWidget {
                               ),
                               const SizedBox(width: 5),
                               Text(
-                                '$currentStreak day streak',
+                                habit.isQuitHabit
+                                    ? '$currentStreak days clean'
+                                    : '$currentStreak day streak',
                                 style: TextStyle(
                                   color: textMuted,
                                   fontSize: 12,

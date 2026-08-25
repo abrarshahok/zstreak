@@ -162,8 +162,9 @@ class _MilestoneOverlayState extends State<_MilestoneOverlay>
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path)],
-          text:
-              '${widget.streak}-day streak on ${widget.habit.name} ${widget.habit.emoji} - built with ZStreak',
+          text: widget.habit.isQuitHabit
+              ? '${widget.streak} days clean from ${widget.habit.name} ${widget.habit.emoji} - built with ZStreak'
+              : '${widget.streak}-day streak on ${widget.habit.name} ${widget.habit.emoji} - built with ZStreak',
         ),
       );
     } catch (_) {
@@ -278,9 +279,9 @@ class _MilestoneOverlayState extends State<_MilestoneOverlay>
 
                       const SizedBox(height: 4),
 
-                      // ── "day streak" label ────────────────────────────────
+                      // ── "day streak" / "days clean" label ─────────────────
                       Text(
-                        'day streak',
+                        widget.habit.isQuitHabit ? 'days clean' : 'day streak',
                         style: TextStyle(
                           color: textMuted,
                           fontSize: 18,
